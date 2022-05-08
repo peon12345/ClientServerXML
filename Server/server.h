@@ -11,9 +11,6 @@
 #include <mutex>
 #include "../DataStruct/datastruct.h"
 
-inline constexpr int MAX_CLIENT_CONNECTION_SERVER = 1;
-inline constexpr int SERVER_PORT = 1111;
-
 class Server {
 public:
   Server() = default;
@@ -24,7 +21,7 @@ public:
   Server& operator = (const Server&) = delete;
   Server& operator = (Server&&) = delete;
 
-  void initServer(const uint maxConnect,ushort port);
+  void initServer(const std::string& ip,ushort port,const uint maxConnect);
 
   void startListen(bool listenNewConnect = true, bool listenClientSocket = true);
   void stopListenConnects();

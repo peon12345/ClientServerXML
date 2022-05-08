@@ -21,7 +21,6 @@ public:
   XmlParser(XmlParser&& p) = delete;
 
   enum class  XmlFormatSupport : uint8_t{
-    UNIDENTIFIED = 0,
     MESSAGE_WITH_IMAGE = 1
   };
 

@@ -4,6 +4,7 @@
 #include <QDomDocument>
 #include "xmlparserformat1.h"
 #include "xmldata.h"
+#include <QPixmap>
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
@@ -12,7 +13,9 @@ MainWindow::MainWindow(QWidget *parent)
   ui->setupUi(this);
   ui->lineEditIP->setText("127.0.0.1");
   ui->lineEditPort->setText("8005");
-  //setEnableButtons(false);
+
+  ui->imageView->setAlignment(Qt::AlignCenter);
+  setEnableButtons(false);
 }
 
 MainWindow::~MainWindow()
@@ -57,20 +60,8 @@ void MainWindow::on_pushButtonLoadXml_clicked()
 
 void MainWindow::xmlHandler(const QDomDocument &xmlDoc)
 {
-
-  XmlParser::XmlFormatSupport format = XmlParser::XmlFormatSupport::UNIDENTIFIED;
-
-  QDomNodeList panelList = xmlDoc.elementsByTagName("Message");
-
-  for ( int i = 0 ; i < panelList.size() ; ++i ) {
-    QDomElement l_div( panelList.at( i ).toElement() );
-    QString typeXml( l_div.attribute( "FormatVersion" ) );
-    if(!typeXml.isEmpty()){
-      format = static_cast<XmlParser::XmlFormatSupport>(typeXml.toInt());
-      break;
-    }
-
-  }
+  //в будущем здесь можно узнать тип документа
+  XmlParser::XmlFormatSupport format = XmlParser::XmlFormatSupport::MESSAGE_WITH_IMAGE;
 
   std::unique_ptr<XmlParser> xmlParser;
   std::vector<QString> sendAttributes;
@@ -106,11 +97,27 @@ void MainWindow::xmlHandler(const QDomDocument &xmlDoc)
   try{
     xmlData = xmlParser->parse(xmlDoc);
   }catch(...){
-
+    return void();
   }
 
-  //данные получены
+  fillForm(xmlData);
 
+}
+
+void MainWindow::fillForm(const XmlData &xmlData)
+{
+  std::list<QByteArray> image = xmlData.values("image");
+
+  if(!image.empty()){
+    QPixmap pix;
+    pix.loadFromData(QByteArray::fromBase64(image.front()),"bmp");
+    ui->imageView->setPixmap(pix);
+  }
+
+  ui->textEdit->append("FormatVersion:" + xmlData.values("FormatVersion").front() + " " + "msg id:" + xmlData.values("id").front() );
+  ui->textEdit->append("From:" + xmlData.values("from").front() + " | " + "To:" + xmlData.values("to").front());
+  ui->textEdit->append("Text:");
+  ui->textEdit->append("<span style=\" font-size:8pt; font-weight:600; color:#"+xmlData.values("color").front()+";\" >" + xmlData.values("text").front() + "</span>");
 }
 
 void MainWindow::setEnableButtons(bool isEnable)

@@ -18,7 +18,6 @@ struct HasherQString
 };
 
 
-
 class XmlData final
 {
 public:
@@ -29,11 +28,10 @@ public:
   XmlData& operator= (XmlData&&) = default;
   ~XmlData() = default;
 
-
   explicit operator bool() const;
 
-  std::list<QByteArray> values(const QString& attributeName);
-  std::list<std::pair<QString,QByteArray>> values(const std::vector<QString>& attributeNames);
+  std::list<QByteArray> values(const QString& attributeName) const;
+  std::list<std::pair<QString,QByteArray>> values(const std::vector<QString>& attributeNames) const;
 
   void setData(std::vector<std::pair<QString,QByteArray>>&& data);
 

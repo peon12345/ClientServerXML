@@ -1,7 +1,5 @@
 #include "server.h"
 
-const QString Server::DEFAULT_IP = "127.0.0.1";
-
 Server::~Server()
 {
   closesocket(m_listenSocket);
@@ -14,7 +12,7 @@ Server::~Server()
   WSACleanup();
 }
 
-void Server::initServer(const uint maxConnect , ushort port )
+void Server::initServer(const std::string &ip, ushort port, const uint maxConnect)
 {
   WSAData wsData;
   WORD DllVersion = MAKEWORD(2,1);
@@ -23,6 +21,7 @@ void Server::initServer(const uint maxConnect , ushort port )
   }
 
   SOCKADDR_IN sockAddr;
+  sockAddr.sin_addr.s_addr = inet_addr(ip.c_str());
   sockAddr.sin_port = htons(port);
   sockAddr.sin_family = AF_INET;
 
@@ -296,10 +295,6 @@ void Server::recvDataClientHanlder(const std::vector<char> &data,const std::vect
 
       sendData(translatedData,0,TypePacket::DATA,true);
 
-      QString str = "";
-      for(int i = 0; i < translatedData.size() ; ++i){
-        str += translatedData.at(i);
-      }
     }
   }
 }
@@ -466,11 +461,6 @@ void Server::sendData(std::vector<char> &data, SOCKET socket, TypePacket type,bo
     auto it = m_queueSendData.insert(std::make_pair(socket,std::queue<std::vector<char>>()));
     it.first->second.emplace(data);
   }
-
-  QString test{};
-  for(int i =0; i < data.size();++i){
-    test += data.at(i);
-  }
 }
 
 void Server::sendData(const std::vector<char> &data, SOCKET socket)
@@ -504,7 +494,6 @@ void Server::disconnectClientSocket(SOCKET socket)
 
   shutdown(socket,SD_BOTH);
   closesocket(socket);
-
 }
 
 std::optional<SOCKET> Server::findSocketCleint(const std::string &nameClient)

@@ -11,7 +11,7 @@ QT_BEGIN_NAMESPACE
     namespace Ui { class MainWindow; }
 QT_END_NAMESPACE
 
-    class MainWindow : public QMainWindow
+ class MainWindow : public QMainWindow
 {
   Q_OBJECT
 
@@ -28,6 +28,7 @@ private slots:
 
 private:
   void xmlHandler(const QDomDocument& xmlDoc);
+  void fillForm(const XmlData& xmlData);
 private:
   void setEnableButtons(bool isEnable);
  // Server m_server;

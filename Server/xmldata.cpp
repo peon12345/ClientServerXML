@@ -1,13 +1,11 @@
 #include "xmldata.h"
 
-
-
 XmlData::operator bool() const
 {
   return !m_data.empty();
 }
 
-std::list<std::pair<QString, QByteArray> > XmlData::values(const std::vector<QString>& attributeNames)
+std::list<std::pair<QString, QByteArray> > XmlData::values(const std::vector<QString>& attributeNames) const
 {
 
   std::list<std::pair<QString,QByteArray>> result;
@@ -34,12 +32,10 @@ void XmlData::setData(std::vector<std::pair<QString,QByteArray>>&& data)
   }
 
   data.clear();
-
-
 }
 
 
-std::list<QByteArray> XmlData::values(const QString &attributeName)
+std::list<QByteArray> XmlData::values(const QString &attributeName) const
 {
 
   std::list<QByteArray> values;
