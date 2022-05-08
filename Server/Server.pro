@@ -12,13 +12,17 @@ SOURCES += \
     main.cpp \
     mainwindow.cpp \
     server.cpp \
+    xmldata.cpp \
     xmlparser.cpp \
+    xmlparserformat1.cpp \
     xmlreader.cpp
 
 HEADERS += \
     mainwindow.h \
     server.h \
+    xmldata.h \
     xmlparser.h \
+    xmlparserformat1.h \
     xmlreader.h
 
 FORMS += \

@@ -29,6 +29,7 @@ private slots:
 private:
   void xmlHandler(const QDomDocument& xmlDoc);
 private:
+  void setEnableButtons(bool isEnable);
  // Server m_server;
   Ui::MainWindow *ui;
 };

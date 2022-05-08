@@ -11,9 +11,7 @@ public:
   XmlReader(const XmlReader&) = delete;
   XmlReader(XmlReader&&) = delete;
   //узнать формат в методе статик?
-  //создать в стеке нужный класс , по енум из форматов
-  //передать путь
-  //получили QDomDocument с атрибутами и значениями
+
   static std::optional<QDomDocument> read(const QString& path);
 };
 

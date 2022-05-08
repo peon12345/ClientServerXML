@@ -4,12 +4,19 @@
 #include <vector>
 #include <QString>
 #include <QDomDocument>
+#include <xmldata.h>
 
 
-class XmlParser final
+class XmlParser
 {
 public:
-  XmlParser() = delete;
+  XmlParser() = default;
+  virtual ~XmlParser() = default;
+
+
+  XmlParser& operator = (const XmlParser&) = delete;
+  XmlParser& operator = (XmlParser&&) = delete;
+
   XmlParser(const XmlParser& p) = delete;
   XmlParser(XmlParser&& p) = delete;
 
@@ -18,8 +25,10 @@ public:
     MESSAGE_WITH_IMAGE = 1
   };
 
+ virtual XmlData parse(const QDomDocument& doc) = 0;
 
- static std::list<std::pair<QString,std::vector<char>>> parse(const QDomDocument& doc);
+protected:
+ void retrievElements(const QDomElement& root, const QString& tag, const std::vector<QString>& attributes, std::vector<std::pair<QString, QByteArray> > &outputValues);
 };
 
 #endif // XMLPARSER_H

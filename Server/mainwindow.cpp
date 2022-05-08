@@ -2,13 +2,17 @@
 #include "ui_mainwindow.h"
 #include <QFileDialog>
 #include <QDomDocument>
+#include "xmlparserformat1.h"
+#include "xmldata.h"
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
       , ui(new Ui::MainWindow)
 {
   ui->setupUi(this);
-
+  ui->lineEditIP->setText("127.0.0.1");
+  ui->lineEditPort->setText("8005");
+  //setEnableButtons(false);
 }
 
 MainWindow::~MainWindow()
@@ -19,6 +23,10 @@ MainWindow::~MainWindow()
 
 void MainWindow::on_pushButtonStart_clicked()
 {
+
+//  if(){
+//    setEnableButtons(true);
+//  }
 
 }
 
@@ -52,11 +60,7 @@ void MainWindow::xmlHandler(const QDomDocument &xmlDoc)
 
   XmlParser::XmlFormatSupport format = XmlParser::XmlFormatSupport::UNIDENTIFIED;
 
-  //QDomNodeList l_divs( xmlDoc.elementsByTagName( "FormatVersion" ) );
-
-
   QDomNodeList panelList = xmlDoc.elementsByTagName("Message");
-  QDomNodeList panelCfgList = xmlDoc.elementsByTagName("FormatVersion");
 
   for ( int i = 0 ; i < panelList.size() ; ++i ) {
     QDomElement l_div( panelList.at( i ).toElement() );
@@ -68,25 +72,52 @@ void MainWindow::xmlHandler(const QDomDocument &xmlDoc)
 
   }
 
+  std::unique_ptr<XmlParser> xmlParser;
+  std::vector<QString> sendAttributes;
+
   switch (format) {
 
   case XmlParser::XmlFormatSupport::MESSAGE_WITH_IMAGE:{
 
-    std::list<std::pair<QString,std::vector<char>>> data = XmlParser::parse(xmlDoc);
+    xmlParser = std::make_unique<XmlParserFormat1>();
 
-    static const std::vector<QString> sendDataAttributes{"from","text","color","image"};
-
+    static const std::vector<QString> sendNameAttributes{"from","text","color","image"};
+    sendAttributes = sendNameAttributes;
 
     break;
   }
 
 
+  //...
+  //другие XML форматы
 
-    default:
+  default:
 
     ui->textEdit->setText("this XML is not supported!");
-    break;
+    return void();
   }
+
+  //для формы заполним все что есть
+  //для отправки настроим
+
+
+  XmlData xmlData;
+
+  try{
+    xmlData = xmlParser->parse(xmlDoc);
+  }catch(...){
+
+  }
+
+  //данные получены
+
+}
+
+void MainWindow::setEnableButtons(bool isEnable)
+{
+  ui->pushButtonLoadXml->setEnabled(isEnable);
+  ui->pushButtonDisconnectClient->setEnabled(isEnable);
+  ui->pushButtonStop->setEnabled(isEnable);
 }
 
 
