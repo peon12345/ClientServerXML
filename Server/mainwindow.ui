@@ -127,9 +127,6 @@
          </widget>
         </item>
         <item>
-         <widget class="QLineEdit" name="lineEdit"/>
-        </item>
-        <item>
          <widget class="QTextEdit" name="textEdit">
           <property name="sizePolicy">
            <sizepolicy hsizetype="Expanding" vsizetype="Fixed">

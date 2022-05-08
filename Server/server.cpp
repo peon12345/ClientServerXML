@@ -15,7 +15,7 @@ Server::~Server()
 void Server::initServer(const std::string &ip, ushort port, const uint maxConnect)
 {
   WSAData wsData;
-  WORD DllVersion = MAKEWORD(2,1);
+  WORD DllVersion = MAKEWORD(2,2);
   if(WSAStartup(DllVersion,&wsData) !=0 ){
     throw("INIT_ERROR");
   }
@@ -55,6 +55,7 @@ void Server::initServer(const std::string &ip, ushort port, const uint maxConnec
     throw("SET_UNBLOCK_LISTEN_SOCKET_ERROR");
   }
 
+  m_ip = ip;
   m_port = port;
   m_maxConnection = maxConnect;
 }
@@ -129,7 +130,9 @@ void Server::startListen(bool listenNewConnect,bool listenClientSocket)
                 if(ioctlsocket(clientSocket, FIONBIO, &NonBlockFlag) != SOCKET_ERROR)
                 {
                   m_connectedClients.emplace_back(clientSocket,nullptr);
-                  newConnectionHandler(clientSocket);
+
+                  newClientConnectHandler(clientSocket);
+
                 }else{
                   disconnectClientSocket(clientSocket);
                 }
@@ -175,7 +178,7 @@ void Server::startListen(bool listenNewConnect,bool listenClientSocket)
 
             if(itCommonData != m_queueSendData.end()){
 
-              send(m_connectedClients.at(i).first,itCommonData->second.front().data(),itCommonData->second.front().size(),0);
+              startSendData(m_connectedClients.at(i).first,itCommonData->second.front());
               sendDataClientHandler(itCommonData->second.front() , m_connectedClients.at(i));
             }
 
@@ -183,7 +186,8 @@ void Server::startListen(bool listenNewConnect,bool listenClientSocket)
             if(it != m_queueSendData.end()){
 
               while(!it->second.empty()){
-                send(m_connectedClients.at(i).first,it->second.front().data(),it->second.front().size(),0);
+
+                startSendData(m_connectedClients.at(i).first,it->second.front());
                 sendDataClientHandler(it->second.front() , m_connectedClients.at(i));
                 it->second.pop();
               }
@@ -238,19 +242,6 @@ void Server::stopListenClientSocket()
   m_flagListenClientData = false;
 }
 
-void Server::newConnectionHandler(SOCKET newConnectionSocket)
-{
-  static const std::string connectedStr = "Server: Connection completed!";
-  static std::vector<char> msgConnected(Data::sizeHeader(TypePacket::DATA));
-
-  if(!msgConnected.empty()) {
-    msgConnected.insert(msgConnected.end(),connectedStr.begin(),connectedStr.end());
-  }
-
-  sendData(msgConnected,newConnectionSocket,TypePacket::DATA , true);
-}
-
-
 
 
 void Server::disconnectClientHandler(std::pair<SOCKET, const ClientInfo*> disconnectClient)
@@ -258,7 +249,7 @@ void Server::disconnectClientHandler(std::pair<SOCKET, const ClientInfo*> discon
   static const std::string disconnectedStr = "Server: disconnected you!";
   static std::vector<char> msgDisconnected(Data::sizeHeader(TypePacket::DATA));
 
-  if(msgDisconnected.empty()) {
+  if(!msgDisconnected.empty()) {
     Data::fillHeader(msgDisconnected,TypePacket::DATA,disconnectedStr.length());
     msgDisconnected.insert(msgDisconnected.end(),disconnectedStr.begin(),disconnectedStr.end());
   }
@@ -424,14 +415,22 @@ void Server::recvDataPacket(SOCKET socket, bool isPrivate)
   }
 }
 
+void Server::startSendData(SOCKET socket, std::vector<char> &data)
+{
+  size_t sendResult = 0;
+  size_t sizeData = 0;
+  do{
+    sizeData =  data.size();
+    sendResult = send(socket,data.data(),sizeData,0);
+  }while(sendResult < sizeData || static_cast<int>(sendResult) != SOCKET_ERROR);
+}
+
 void Server::sendData(std::vector<char> &data, SOCKET socket, TypePacket type,bool fillHeader)
 {
-
   if(type != TypePacket::UNKNOWN && fillHeader){
 
     uint8_t sizeHeader = Data::sizeHeader(type);
     bool memReserve = false;
-
 
     if( sizeHeader <= data.size()){
       for(uint8_t i = 0; i < sizeHeader; ++i){
@@ -453,17 +452,10 @@ void Server::sendData(std::vector<char> &data, SOCKET socket, TypePacket type,bo
     }
   }
 
-  auto it = m_queueSendData.find(socket);
-
-  if(it != m_queueSendData.end()) {
-    it->second.emplace(data);
-  }else{
-    auto it = m_queueSendData.insert(std::make_pair(socket,std::queue<std::vector<char>>()));
-    it.first->second.emplace(data);
-  }
+  sendData(socket,data);
 }
 
-void Server::sendData(const std::vector<char> &data, SOCKET socket)
+void Server::sendData(SOCKET socket, const std::vector<char> &data)
 {
   auto it = m_queueSendData.find(socket);
 
@@ -472,7 +464,23 @@ void Server::sendData(const std::vector<char> &data, SOCKET socket)
   }else{
     auto it = m_queueSendData.insert(std::make_pair(socket,std::queue<std::vector<char>>{}));
     it.first->second.emplace(data);
-  }
+    }
+}
+
+void Server::disconnectClientByName(const QString &name)
+{
+  std::string nameStd = name.toStdString();
+
+  auto it = std::find_if(m_connectedClients.begin(),m_connectedClients.end(),
+                         [&nameStd](const std::pair<SOCKET,ClientInfo*>& pair) {
+
+    return (nameStd == pair.second->getName());
+
+    });
+
+  if(it != m_connectedClients.end()){
+    disconnectClientSocket(it->first);
+    }
 }
 
 
@@ -509,3 +517,40 @@ std::optional<SOCKET> Server::findSocketCleint(const std::string &nameClient)
     return std::nullopt;
   }
 }
+
+void Server::newClientConnectHandler(SOCKET newConnection)
+{
+  static const std::string connectedStr = "Server: Connection completed!";
+  static std::vector<char> msgConnected(Data::sizeHeader(TypePacket::DATA));
+  msgConnected.insert(msgConnected.end(),connectedStr.begin(),connectedStr.end());
+  sendData(msgConnected,newConnection,TypePacket::DATA , true);
+
+  emit clientConnected();
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

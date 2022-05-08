@@ -5,6 +5,7 @@
 #include "xmlparserformat1.h"
 #include "xmldata.h"
 #include <QPixmap>
+#include <QMessageBox>
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
@@ -27,17 +28,34 @@ MainWindow::~MainWindow()
 void MainWindow::on_pushButtonStart_clicked()
 {
 
-//  if(){
-//    setEnableButtons(true);
-//  }
+  try{
 
+    m_server.initServer(ui->lineEditIP->text().toStdString(),ui->lineEditPort->text().toInt());
+
+  }catch(const QString& str){
+    QMessageBox msg;
+    msg.setInformativeText("Error start server!");
+    msg.setText(str);
+    msg.setIcon(QMessageBox::Critical);
+    msg.setStandardButtons(QMessageBox::Ok);
+    msg.exec();
+    return void();
+  }
+
+  ui->textEdit->setText("Server started!");
+
+  m_server.startListen();
+
+  ui->textEdit->setText("The server is waiting for clients to connect...");
+
+  setEnableButtons(true);
 }
 
 
 void MainWindow::on_pushButtonDisconnectClient_clicked()
 {
   QModelIndex index = ui->listViewConnectedClients->currentIndex();
-  //QString itemText = index.data(Qt::DisplayRole).toString();
+  QString itemText = index.data(Qt::DisplayRole).toString();
 }
 
 
@@ -64,7 +82,7 @@ void MainWindow::xmlHandler(const QDomDocument &xmlDoc)
   XmlParser::XmlFormatSupport format = XmlParser::XmlFormatSupport::MESSAGE_WITH_IMAGE;
 
   std::unique_ptr<XmlParser> xmlParser;
-  std::vector<QString> sendAttributes;
+  std::vector<QString> attributesToSend;
 
   switch (format) {
 
@@ -73,7 +91,7 @@ void MainWindow::xmlHandler(const QDomDocument &xmlDoc)
     xmlParser = std::make_unique<XmlParserFormat1>();
 
     static const std::vector<QString> sendNameAttributes{"from","text","color","image"};
-    sendAttributes = sendNameAttributes;
+    attributesToSend = sendNameAttributes;
 
     break;
   }
@@ -88,10 +106,6 @@ void MainWindow::xmlHandler(const QDomDocument &xmlDoc)
     return void();
   }
 
-  //для формы заполним все что есть
-  //для отправки настроим
-
-
   XmlData xmlData;
 
   try{
@@ -101,7 +115,7 @@ void MainWindow::xmlHandler(const QDomDocument &xmlDoc)
   }
 
   fillForm(xmlData);
-
+  sendDataToServer(xmlData.values(attributesToSend));
 }
 
 void MainWindow::fillForm(const XmlData &xmlData)
@@ -118,6 +132,11 @@ void MainWindow::fillForm(const XmlData &xmlData)
   ui->textEdit->append("From:" + xmlData.values("from").front() + " | " + "To:" + xmlData.values("to").front());
   ui->textEdit->append("Text:");
   ui->textEdit->append("<span style=\" font-size:8pt; font-weight:600; color:#"+xmlData.values("color").front()+";\" >" + xmlData.values("text").front() + "</span>");
+}
+
+void MainWindow::sendDataToServer(const std::list<std::pair<QString, QByteArray> > &data)
+{
+
 }
 
 void MainWindow::setEnableButtons(bool isEnable)

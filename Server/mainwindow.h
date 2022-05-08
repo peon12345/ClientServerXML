@@ -29,9 +29,10 @@ private slots:
 private:
   void xmlHandler(const QDomDocument& xmlDoc);
   void fillForm(const XmlData& xmlData);
+  void sendDataToServer(const std::list<std::pair<QString,QByteArray>>& data);
 private:
   void setEnableButtons(bool isEnable);
- // Server m_server;
+  Server m_server;
   Ui::MainWindow *ui;
 };
 #endif // MAINWINDOW_H
