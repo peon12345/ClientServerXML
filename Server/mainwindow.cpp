@@ -17,6 +17,14 @@ MainWindow::MainWindow(QWidget *parent)
 
   ui->imageView->setAlignment(Qt::AlignCenter);
   setEnableButtons(false);
+
+
+  m_modelNewConnections = new QStringListModel(this);
+  ui->listViewConnectedClients->setModel(m_modelNewConnections);
+
+
+
+  connect(&m_server,&Server::clientConnected,this,&MainWindow::addNewClient);
 }
 
 MainWindow::~MainWindow()
@@ -56,6 +64,7 @@ void MainWindow::on_pushButtonDisconnectClient_clicked()
 {
   QModelIndex index = ui->listViewConnectedClients->currentIndex();
   QString itemText = index.data(Qt::DisplayRole).toString();
+  m_server.disconnectClientByName(itemText);
 }
 
 
@@ -74,6 +83,17 @@ void MainWindow::on_pushButtonLoadXml_clicked()
   }
 
   xmlHandler(xmlDoc.value());
+}
+
+void MainWindow::addNewClient(const QString &name)
+{
+  if(m_modelNewConnections){
+  if(m_modelNewConnections->insertRow(m_modelNewConnections->rowCount())) {
+      QModelIndex index = m_modelNewConnections->index(m_modelNewConnections->rowCount() - 1, 0);
+      m_modelNewConnections->setData(index, name);
+  }
+    }
+
 }
 
 void MainWindow::xmlHandler(const QDomDocument &xmlDoc)

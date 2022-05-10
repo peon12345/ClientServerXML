@@ -5,7 +5,7 @@
 #include "xmlreader.h"
 #include "server.h"
 #include "xmlparser.h"
-
+#include <QStringListModel>
 
 QT_BEGIN_NAMESPACE
     namespace Ui { class MainWindow; }
@@ -25,6 +25,7 @@ private slots:
   void on_pushButtonDisconnectClient_clicked();
 
   void on_pushButtonLoadXml_clicked();
+  void addNewClient(const QString& name);
 
 private:
   void xmlHandler(const QDomDocument& xmlDoc);
@@ -33,6 +34,7 @@ private:
 private:
   void setEnableButtons(bool isEnable);
   Server m_server;
+  QStringListModel* m_modelNewConnections;
   Ui::MainWindow *ui;
 };
 #endif // MAINWINDOW_H

@@ -194,7 +194,6 @@ void Server::startListen(bool listenNewConnect,bool listenClientSocket)
               if(it->first != 0){
                 m_queueSendData.erase(it);
               }
-
             }
           }
 
@@ -243,24 +242,23 @@ void Server::stopListenClientSocket()
 }
 
 
-
 void Server::disconnectClientHandler(std::pair<SOCKET, const ClientInfo*> disconnectClient)
 {
   static const std::string disconnectedStr = "Server: disconnected you!";
-  static std::vector<char> msgDisconnected(Data::sizeHeader(TypePacket::DATA));
+  static std::vector<char> msgDisconnected(Data::sizeHeader(TypePacket::MESSAGE));
 
   if(!msgDisconnected.empty()) {
-    Data::fillHeader(msgDisconnected,TypePacket::DATA,disconnectedStr.length());
+    Data::fillHeader(msgDisconnected,TypePacket::MESSAGE,disconnectedStr.length());
     msgDisconnected.insert(msgDisconnected.end(),disconnectedStr.begin(),disconnectedStr.end());
   }
 
   std::string noticeDisconnectionStr = disconnectClient.second->getName() + " - disconnected";
 
   std::vector<char> msgDisconnectedNotice;
-  Data::fillHeader(msgDisconnectedNotice,TypePacket::DATA, noticeDisconnectionStr.length());
+  Data::fillHeader(msgDisconnectedNotice,TypePacket::MESSAGE, noticeDisconnectionStr.length());
   msgDisconnectedNotice.insert(msgDisconnectedNotice.end(),noticeDisconnectionStr.begin(),noticeDisconnectionStr.end());
 
-  sendData(msgDisconnected,0,TypePacket::DATA);
+  sendData(msgDisconnected,0,TypePacket::MESSAGE);
 }
 
 void Server::sendDataClientHandler(const std::vector<char> &data, std::pair<SOCKET, const ClientInfo*> sendDataClientInfo)
@@ -275,16 +273,16 @@ void Server::recvDataClientHanlder(const std::vector<char> &data,const std::vect
     //данные приняты
     //отправим всем клиентам
 
-    if(header.front() == static_cast<char>(TypePacket::DATA)){
+    if(header.front() == static_cast<char>(TypePacket::MESSAGE)){
 
-      std::vector<char> translatedData(Data::sizeHeader(TypePacket::DATA));
+      std::vector<char> translatedData(Data::sizeHeader(TypePacket::MESSAGE));
 
       std::string name = client->getName() + ":";
 
       translatedData.insert(translatedData.end(),name.begin(),name.end());
       translatedData.insert(translatedData.end(),data.begin(),data.end());
 
-      sendData(translatedData,0,TypePacket::DATA,true);
+      sendData(translatedData,0,TypePacket::MESSAGE,true);
 
     }
   }
@@ -311,9 +309,6 @@ void Server::startRecvPacket(SOCKET socket)
 
     if(!it->second && type != static_cast<char>(TypePacket::INFO_CLIENT)){
       //если клиент не представился и шлет нам что то
-      //назовем его аноним
-      ClientInfo* clientInfo = new ClientInfo("Anonim");
-      it->second = clientInfo;
     }
 
     m_header.push_back(type);
@@ -326,7 +321,7 @@ void Server::startRecvPacket(SOCKET socket)
       break;
     }
 
-    case TypePacket::DATA:{
+    case TypePacket::MESSAGE:{
       recvDataPacket(socket);
       break;
     }
@@ -362,7 +357,9 @@ void Server::recvInfoPacket(SOCKET socket)
 
     if(it->second){
       delete it->second;
-    }
+    }else{
+     m_counterUnknownClients--;
+     }
 
     it->second = clientInfo;
 
@@ -504,7 +501,7 @@ void Server::disconnectClientSocket(SOCKET socket)
   closesocket(socket);
 }
 
-std::optional<SOCKET> Server::findSocketCleint(const std::string &nameClient)
+std::optional<SOCKET> Server::findSocketClient(const std::string &nameClient)
 {
   auto it = std::find_if(m_connectedClients.begin(),
                          m_connectedClients.end(),
@@ -521,11 +518,31 @@ std::optional<SOCKET> Server::findSocketCleint(const std::string &nameClient)
 void Server::newClientConnectHandler(SOCKET newConnection)
 {
   static const std::string connectedStr = "Server: Connection completed!";
-  static std::vector<char> msgConnected(Data::sizeHeader(TypePacket::DATA));
+  static std::vector<char> msgConnected(Data::sizeHeader(TypePacket::MESSAGE));
   msgConnected.insert(msgConnected.end(),connectedStr.begin(),connectedStr.end());
-  sendData(msgConnected,newConnection,TypePacket::DATA , true);
+  sendData(msgConnected,newConnection,TypePacket::MESSAGE , true);
 
-  emit clientConnected();
+  //клиент еще не назвал свое имя, назовем его
+
+  auto it = std::find_if(m_connectedClients.begin(),m_connectedClients.end(),[newConnection] (const std::pair<SOCKET,ClientInfo*>& pair) {
+
+    return newConnection == pair.first;
+
+    } );
+
+
+  if(it != m_connectedClients.end()){
+      QString name = "Anonim";
+      if(m_counterUnknownClients > 0){
+       name += "(" + QString::number(m_counterUnknownClients) + ")";
+      }
+
+     ClientInfo* clientInfo = new ClientInfo(name.toStdString());
+     it->second = clientInfo;
+
+     m_counterUnknownClients++;
+     emit clientConnected(name);
+  }
 }
 
 

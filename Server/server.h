@@ -37,7 +37,7 @@ protected:
   ushort m_port;
 protected:
   void disconnectClientSocket(SOCKET socket);
-  std::optional<SOCKET> findSocketCleint(const std::string& nameClient );
+  std::optional<SOCKET> findSocketClient(const std::string& nameClient );
 
   virtual void newClientConnectHandler(SOCKET newConnection);
   virtual void disconnectClientHandler(std::pair<SOCKET,const ClientInfo*> disconnectClient);
@@ -48,6 +48,7 @@ private:
 
   std::atomic<bool> m_flagListenConnects = false;
   std::atomic<bool> m_flagListenClientData = false;
+  int m_counterUnknownClients = 0;
   SOCKET m_listenSocket;
   size_t m_maxConnection;
 
@@ -63,8 +64,10 @@ private:
   void recvDataPacket(SOCKET socket,bool isPrivate = false);
   void startSendData(SOCKET socket,std::vector<char>& data);
 
+  std::optional<QString> findNameBySocket(SOCKET socket);
+  std::optional<SOCKET> findSocketByName(const QString& name);
 signals:
-  void clientConnected();
+  void clientConnected(const QString& name);
 
 };
 

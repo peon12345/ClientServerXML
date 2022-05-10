@@ -5,13 +5,21 @@
 #include <winsock2.h>
 #include <uchar.h>
 #include <algorithm>
+#include <array>
 
 enum class TypePacket : int8_t {
   INFO_CLIENT,
-  DATA,
-  PRIVATE_DATA,
+  MESSAGE,
+  IMAGE,
   UNKNOWN,
 };
+
+enum class TypeDataAccess : int8_t {
+  PUBLIC_DATA,
+  PRIVATE_DATA,
+};
+
+
 
 inline constexpr int LEN_TYPE_PACKET = 1;
 inline constexpr int LEN_COUNT_NAME = 1;
@@ -19,113 +27,115 @@ inline constexpr int LEN_SIZE_DATA_INFO = 4;
 
 namespace Data {
 
-inline uint8_t sizeHeader(TypePacket type){
+  inline uint8_t sizeHeader(TypePacket type){
 
-  switch(type) {
-  case TypePacket::INFO_CLIENT: {
-    return LEN_TYPE_PACKET;
-    break;
-  }
+    switch(type) {
+      case TypePacket::INFO_CLIENT: {
+          return LEN_TYPE_PACKET;
+          break;
+        }
 
-  case TypePacket::DATA: {
-    return LEN_TYPE_PACKET + LEN_SIZE_DATA_INFO;
-    break;
-  }
+      case TypePacket::MESSAGE: {
+          return LEN_TYPE_PACKET + LEN_SIZE_DATA_INFO;
+          break;
+        }
 
-  case TypePacket::PRIVATE_DATA: {
+      case TypePacket::PRIVATE_DATA: {
 
-    return LEN_TYPE_PACKET +  LEN_COUNT_NAME +  LEN_SIZE_DATA_INFO;
-  }
+          return LEN_TYPE_PACKET +  LEN_COUNT_NAME +  LEN_SIZE_DATA_INFO;
+        }
 
-  default:{
+      default:{
 
-    return  LEN_TYPE_PACKET + LEN_SIZE_DATA_INFO;
-  }
-
-  }
-}
-
-
-inline void fillHeader(std::vector<char>& data,TypePacket type,int size = -1){
-
-
-  int index = 0;
-  if(data.empty()){
-  data.resize(sizeHeader(type));
-  }
-
-  data.at(index++) = static_cast<char>(type);
-
-  switch (type) {
-
-  case TypePacket::PRIVATE_DATA:
-  case TypePacket::DATA: { //добавляем информацию о длине
-    if(size >0){
-
-      if(data.size() < LEN_SIZE_DATA_INFO){
-        data.resize(data.size() + (LEN_SIZE_DATA_INFO - data.size()) );
-      }
-
-      for(int i = 0;i< LEN_SIZE_DATA_INFO;++i){
-
-        if(size > 255){
-          data.at(index++) = -1;
-          size -= 255;
-        }else if(size > 0){
-          data.at(index++) = size;
-          size -= 255;
-        } else{
-          data.at(index++) = 0;
+          return  LEN_TYPE_PACKET + LEN_SIZE_DATA_INFO;
         }
       }
-    }
-    break;
   }
 
-  default:
-    break;
+
+  inline void fillHeader(std::vector<char>& data,TypePacket type,int size = -1){
+
+
+    int index = 0;
+    if(data.empty()){
+        data.resize(sizeHeader(type));
+      }
+
+    data.at(index++) = static_cast<char>(type);
+
+    switch (type) {
+
+      case TypePacket::IMAGE:
+      case TypePacket::MESSAGE: { //добавляем информацию о длине
+
+
+
+          if(size >0){
+
+              if(data.size() < LEN_SIZE_DATA_INFO){
+                  data.resize(data.size() + (LEN_SIZE_DATA_INFO - data.size()) );
+                }
+
+              for(int i = 0;i< LEN_SIZE_DATA_INFO;++i){
+
+                  if(size > 255){
+                      data.at(index++) = -1;
+                      size -= 255;
+                    }else if(size > 0){
+                      data.at(index++) = size;
+                      size -= 255;
+                    } else{
+                      data.at(index++) = 0;
+                    }
+                }
+            }
+          break;
+        }
+
+
+      default:
+        break;
+      }
   }
-}
 
-inline size_t accumulateSize(const std::vector<char>& sizeBuf){
-  size_t size =0;
-  std::for_each(sizeBuf.begin(), sizeBuf.end(), [&size](const char c){ size += static_cast<unsigned char>(c); });
-  return size;
-}
-
-inline bool recvData(SOCKET socket ,std::vector<char>& dataOutput , size_t size){
-
-  if(dataOutput.size() < size){
-    dataOutput.resize(size);
+  inline size_t accumulateSize(const std::vector<char>& sizeBuf){
+    size_t size =0;
+    std::for_each(sizeBuf.begin(), sizeBuf.end(), [&size](const char c){ size += static_cast<unsigned char>(c); });
+    return size;
   }
 
-  int total = 0;
-  int resultRecv = 0;
-  int sizeLeft = size;
+  inline bool recvData(SOCKET socket ,std::vector<char>& dataOutput , size_t size){
 
-  while(total < sizeLeft) {
-    resultRecv = recv(socket,dataOutput.data(),sizeLeft,0);
+    if(dataOutput.size() < size){
+        dataOutput.resize(size);
+      }
 
-    if (resultRecv == 0) {
-      break;
-    }else if(resultRecv < 0){
+    int total = 0;
+    int resultRecv = 0;
+    int sizeLeft = size;
 
-      return false;
-    }
+    while(total < sizeLeft) {
+        resultRecv = recv(socket,dataOutput.data(),sizeLeft,0);
 
-    total += resultRecv;
-    sizeLeft -= resultRecv;
+        if (resultRecv == 0) {
+            break;
+          }else if(resultRecv < 0){
+
+            return false;
+          }
+
+        total += resultRecv;
+        sizeLeft -= resultRecv;
+      }
+    return true;
   }
-  return true;
-}
 
 }
-
 
 class ClientInfo final {
 public:
   ClientInfo()  {
-  setName("Anonim Anonimovich");
+    setName("Anonim Anonimovich");
 
   }
   ClientInfo(const std::string& name){
@@ -146,11 +156,42 @@ public:
   }
 
 public:
-   static constexpr size_t MAX_LENGHT_NAME = 24;
+  static constexpr size_t MAX_LENGHT_NAME = 24;
 private:
 
   uint8_t m_lenName;
   char m_name[MAX_LENGHT_NAME];
 };
+
+
+class PacketInfo final{
+public:
+  PacketInfo();
+  PacketInfo(TypePacket type,TypeDataAccess typeAccess,std::array<uint8_t,4> size); // конструктор для обычного сообщения
+
+  ~PacketInfo() = default;
+
+ void setTypePacket(TypePacket typePacket);
+ void setTypeDataAcces(TypeDataAccess typeAcces);
+ void setSize(const std::array<uint8_t,4>& size);
+ void setSize(const std::vector<char>& size);
+ bool isValid();
+
+ operator char*();
+private:
+  TypePacket m_typePacket;
+  TypeDataAccess m_typeDataAcces;
+  std::array<uint8_t,4> m_sizeData;
+
+  uint8_t countReceiver;
+  std::vector<std::array<char,ClientInfo::MAX_LENGHT_NAME>> m_receivers;
+
+
+  uint8_t sizeMetaData;
+  std::vector<char> m_metaData;
+};
+
+
+
 
 #endif // DATASTRUCT_H
