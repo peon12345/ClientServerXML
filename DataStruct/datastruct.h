@@ -108,6 +108,8 @@ public:
 
   void setData(const std::vector<char>& data);
   void setData(std::vector<char>&& data);
+
+  const std::vector<char> getData() const;
 private:
   std::vector<char> m_data;
 };

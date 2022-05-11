@@ -3,7 +3,7 @@
 
 
 PacketHeader::PacketHeader() : m_typePacket (TypePacket::UNKNOWN),
-  m_typeDataAcces(TypeDataAccess::PRIVATE_DATA),
+  m_typeDataAcces(TypeDataAccess::PUBLIC_DATA),
   m_countReceiver(0),
   m_sizeMetaData(0)
 
@@ -305,4 +305,9 @@ void Packet::setData(const std::vector<char> &data)
 void Packet::setData(std::vector<char> &&data)
 {
   m_data = std::move(data);
+}
+
+const std::vector<char> Packet::getData() const
+{
+  return m_data;
 }
