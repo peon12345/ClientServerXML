@@ -57,10 +57,9 @@ class PacketHeader {
 public:
   PacketHeader();
 
-  PacketHeader(const std::vector<char>& headerData);
-  PacketHeader(TypePacket type,TypeDataAccess typeAccess,std::array<uint8_t,4> size); // конструктор для обычного сообщения
-
+ explicit PacketHeader(const std::vector<char>& headerData);
  virtual ~PacketHeader() = default;
+
  void setHeaderData(const std::vector<char>& headerData);
  void setTypePacket(TypePacket typePacket);
  void setTypeDataAcces(TypeDataAccess typeAcces);
@@ -69,6 +68,7 @@ public:
  void setSize(int size);
  void setMetaData(const std::vector<char>& metaData);
  void setReceivers(const std::vector<QString>& receivers );
+ void appendReceiver(const QString& name );
  bool isValid() const;
 
  virtual std::vector<char> convertToVector() const;
@@ -76,8 +76,10 @@ public:
  static uint8_t sizeHeader(TypePacket type, TypeDataAccess typeAccess = TypeDataAccess::PUBLIC_DATA, int countReceivers = 0);
 
  TypePacket type() const;
+ TypeDataAccess typeAccess() const;
 public:
  static constexpr int LEN_TYPE_PACKET = 1;
+ static constexpr int LEN_TYPE_DATA_ACCESS = 1;
  static constexpr int LEN_COUNT_NAME = 1;
  static constexpr int LEN_SIZE_DATA_INFO = 4;
  static constexpr int LEN_FORMAT_IMAGE = 3;
@@ -99,7 +101,7 @@ class Packet : public PacketHeader {
 
 public:
   Packet() = default;
-  Packet(const std::vector<char>& dataWithHeader);
+  explicit Packet(const std::vector<char>& dataWithHeader);
 
   void setDataWithHeader(const std::vector<char>& dataWithHeader);
   std::vector<char> convertToVector() const override;

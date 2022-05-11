@@ -31,9 +31,7 @@ void PacketHeader::setHeaderData(const std::vector<char> &headerData)
           std::string name;
 
            for(size_t j = 0; j < ClientInfo::MAX_LENGHT_NAME; ++j){
-
              name += *it++;
-
              }
            m_receivers.push_back(QString::fromLocal8Bit(name.c_str()));
        }
@@ -156,6 +154,8 @@ std::vector<char> PacketHeader::convertToVector() const
     }
 
   result.insert(result.end(),m_sizeData.begin(),m_sizeData.end());
+
+  return result;
 }
 
 uint8_t PacketHeader::sizeHeader(TypePacket type, TypeDataAccess typeAccess, int countReceivers)
@@ -204,7 +204,10 @@ TypePacket PacketHeader::type() const
   return m_typePacket;
 }
 
-
+TypeDataAccess PacketHeader::typeAccess() const
+{
+  return m_typeDataAcces;
+}
 
 void PacketHeader::setTypePacket(TypePacket typePacket)
 {
@@ -259,6 +262,10 @@ void PacketHeader::setReceivers(const std::vector<QString> &receivers)
   m_receivers = receivers;
 }
 
+void PacketHeader::appendReceiver(const QString &name)
+{
+  m_receivers.push_back(name);
+}
 
 Packet::Packet(const std::vector<char> &dataWithHeader) : PacketHeader(dataWithHeader)
 {
@@ -286,6 +293,8 @@ std::vector<char> Packet::convertToVector() const
   if(result.empty()){
     result.insert(result.end(),m_data.begin(),m_data.end());
    }
+
+  return result;
 }
 
 void Packet::setData(const std::vector<char> &data)

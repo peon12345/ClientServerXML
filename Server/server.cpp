@@ -94,7 +94,7 @@ void Server::startListen(bool listenNewConnect,bool listenClientSocket)
 
         }else{ //отправка конкретным клиентам
 
-          for(std::pair<SOCKET,const std::queue<std::vector<char>>&> pair : m_queueSendData){
+          for(std::pair<SOCKET,const std::queue<Packet>&> pair : m_queueSendData){
             FD_SET(pair.first,&fdSetWrite);
           }
         }
@@ -162,10 +162,12 @@ void Server::startListen(bool listenNewConnect,bool listenClientSocket)
 
           if(FD_ISSET(m_connectedClients.at(i).first,&fdSetReady)){ //если есть данные для чтения
 
-            startRecvPacket(m_connectedClients.at(i).first);
-
-            if(!m_connectedClients.empty()){
+            try{
+              recvPacket(m_connectedClients.at(i).first);
               recvDataClientHanlder(m_data,m_header,m_connectedClients.at(i).second);
+            }catch(const QString& str){
+
+              disconnectClientSocket(m_connectedClients.at(i).first);
             }
           }
 
@@ -211,7 +213,7 @@ void Server::startListen(bool listenNewConnect,bool listenClientSocket)
                    //данные, которые должны были быть отправлены всем
                    //делим на конкретных клиентов, которым не удалось отправить
 
-                sendData(it->second.front(),m_connectedClients.at(i).first);
+                sendData(m_connectedClients.at(i).first,it->second.front());
               }
 
             }
@@ -245,23 +247,19 @@ void Server::stopListenClientSocket()
 void Server::disconnectClientHandler(std::pair<SOCKET, const ClientInfo*> disconnectClient)
 {
   static const std::string disconnectedStr = "Server: disconnected you!";
-  static std::vector<char> msgDisconnected(Data::sizeHeader(TypePacket::MESSAGE));
 
-  if(!msgDisconnected.empty()) {
-    Data::fillHeader(msgDisconnected,TypePacket::MESSAGE,disconnectedStr.length());
-    msgDisconnected.insert(msgDisconnected.end(),disconnectedStr.begin(),disconnectedStr.end());
-  }
+  Packet packet;
+  packet.setTypePacket(TypePacket::MESSAGE);
+  packet.setTypeDataAcces(TypeDataAccess::PRIVATE_DATA);
+  packet.appendReceiver(QString::fromLocal8Bit(disconnectClient.second->getName().c_str()));
 
-  std::string noticeDisconnectionStr = disconnectClient.second->getName() + " - disconnected";
+  std::vector<char> temp(disconnectedStr.begin(),disconnectedStr.end());
+  packet.setData(std::move(temp));
 
-  std::vector<char> msgDisconnectedNotice;
-  Data::fillHeader(msgDisconnectedNotice,TypePacket::MESSAGE, noticeDisconnectionStr.length());
-  msgDisconnectedNotice.insert(msgDisconnectedNotice.end(),noticeDisconnectionStr.begin(),noticeDisconnectionStr.end());
-
-  sendData(msgDisconnected,0,TypePacket::MESSAGE);
+  sendData(disconnectClient.first,packet);
 }
 
-void Server::sendDataClientHandler(const std::vector<char> &data, std::pair<SOCKET, const ClientInfo*> sendDataClientInfo)
+void Server::sendDataClientHandler(const Packet &data, std::pair<SOCKET, const ClientInfo*> sendDataClientInfo)
 {
 
 }
@@ -289,68 +287,143 @@ void Server::recvDataClientHanlder(const std::vector<char> &data,const std::vect
 }
 
 
-void Server::startRecvPacket(SOCKET socket)
+void Server::recvPacket(SOCKET socket)
 {
-  m_header.clear();
-  m_data.clear();
+  Packet packet;
 
-     // узнаем тип пакета
   char type;
-  int resultRecv = recv(socket,&type,LEN_TYPE_PACKET,0);
+  int resultRecv = recv(socket,&type,PacketHeader::LEN_TYPE_PACKET,0);
 
   if(resultRecv < 0){
-    disconnectClientSocket(socket);
-    qDebug() <<  socket <<"disconect";
 
+    throw "TYPE_READ_ERROR";
   }else{
 
-    auto it = std::find_if(m_connectedClients.begin() , m_connectedClients.end() , [socket](const std::pair<SOCKET,ClientInfo*>& pair) {
-      return pair.first == socket;} ) ;
+    packet.setTypePacket(static_cast<TypePacket>(type));
 
-    if(!it->second && type != static_cast<char>(TypePacket::INFO_CLIENT)){
-      //если клиент не представился и шлет нам что то
+    char typeAccess = static_cast<char>(TypeDataAccess::PUBLIC_DATA);
+
+    if(TypePacket::INFO_CLIENT != packet.type()){
+
+      resultRecv = recv(socket,&typeAccess,PacketHeader::LEN_TYPE_DATA_ACCESS,0);
+
+      if(resultRecv < 0){
+         throw "TYPE_ACCESS_READ_ERROR";
+      }else{
+        packet.setTypeDataAcces(static_cast<TypeDataAccess>(typeAccess));
+      }
     }
 
-    m_header.push_back(type);
+    if(packet.typeAccess() != TypeDataAccess::PUBLIC_DATA){
+      char sizeReceivers = 0;
 
-    switch (static_cast<TypePacket>(type)) {
+      resultRecv = recv(socket,&sizeReceivers,PacketHeader::LEN_COUNT_NAME,0);
+
+      if(resultRecv < 0){
+         throw "SIZE_RECEIVERS_READ_ERROR";
+      }else{
+
+        std::vector<char> name(ClientInfo::MAX_LENGHT_NAME);
+        for(int i = 0; i < static_cast<uint8_t>(sizeReceivers); ++i){
+          name.clear();
+          if(recvData(socket,name,ClientInfo::MAX_LENGHT_NAME)){
+
+            packet.appendReceiver(QString::fromUtf8(name.data()));
+
+          }else{
+             throw "ERROR_READ_RECEIVERS_NAME";
+          }
+        }
+      }
+    }
+
+
+
+    switch (packet.type()) {
+
+
+    case TypePacket::IMAGE:
+    case TypePacket::MESSAGE:{
+
+      if(TypePacket::IMAGE == packet.type()){
+        std::vector<char> formatImg(Packet::LEN_FORMAT_IMAGE);
+        if(recvData(socket,formatImg,Packet::LEN_FORMAT_IMAGE)){
+
+          packet.setMetaData(formatImg);
+        }else{
+
+          throw "READ_FORMAT_IMAGE_ERROR";
+        }
+      }
+
+      std::vector<char> sizeData(Packet::LEN_SIZE_DATA_INFO);
+
+      if(recvData(socket,sizeData,Packet::LEN_SIZE_DATA_INFO)){
+        packet.setSize(sizeData);
+      }else{
+
+        throw "SIZE_DATA_READ_ERROR";
+      }
+
+      size_t size =0;
+
+      std::for_each(sizeData.begin(),sizeData.end(), [&size] (char s) {
+        size+= (uint8_t)s;
+      });
+
+      std::vector<char> data(size);
+
+      if(recvData(socket,data,size)){
+
+        packet.setData(std::move(data));
+      }else{
+
+        throw "ERROR_DATA_READ";
+      }
+
+    }
 
     case TypePacket::INFO_CLIENT:{
-      qDebug() << "RECV_INFO_CLIENT_TYPE";
-      recvInfoPacket(socket);
+
+
+      std::vector<char> clientInfoData(sizeof(ClientInfo));
+
+      if(recvData(socket,clientInfoData,sizeof(ClientInfo))){
+
+        packet.setData(std::move(clientInfoData));
+      }
+    }
+    default:{
+
+      throw "UNSUPPORTED PACKAGE";
+
       break;
     }
 
-    case TypePacket::MESSAGE:{
-      recvDataPacket(socket);
-      break;
     }
 
-    case TypePacket::PRIVATE_DATA:{
-      recvDataPacket(socket,true);
-    }
+    packetHandler(packet);
 
-    default:
-      break;
-    }
+    emit packageReceived(packet);
   }
 }
 
 
-//если клиент инфо, кастить в клиент инфо
-void Server::recvInfoPacket(SOCKET socket)
-{
-  if(!Data::recvData(socket,m_data,sizeof(ClientInfo))){
 
-    disconnectClientSocket(socket);
+//если клиент инфо, кастить в клиент инфо
+void Server::addClientInfo(const Packet &packet)
+{
+  if(!Data::recvData(packet,m_data,sizeof(ClientInfo))){
+
+    disconnectClientSocket(packet);
   }
 
   ClientInfo* clientInfo = new ClientInfo();
   memcpy(*&clientInfo, m_data.data(), sizeof(ClientInfo));
 
      //сохраним информацию клиента, привяжем к сокету
-  auto it = std::find_if(m_connectedClients.begin() , m_connectedClients.end() ,[socket] (const std::pair<SOCKET,ClientInfo*>& pair)  {
-    return  pair.first ==  socket;  });
+  auto it = std::find_if(m_connectedClients.begin() , m_connectedClients.end() ,[packet] (const std::pair<SOCKET,ClientInfo*>& pair)  {
+    return  pair.first ==  packet;  });
 
 
   if(it != m_connectedClients.end()){
@@ -412,17 +485,17 @@ void Server::recvDataPacket(SOCKET socket, bool isPrivate)
   }
 }
 
-void Server::startSendData(SOCKET socket, std::vector<char> &data)
+void Server::startSendData(SOCKET socket, const Packet &packet)
 {
   size_t sendResult = 0;
   size_t sizeData = 0;
   do{
-    sizeData =  data.size();
-    sendResult = send(socket,data.data(),sizeData,0);
+    sizeData =  packet.size();
+    sendResult = send(socket,packet.data(),sizeData,0);
     }while(sendResult < sizeData || static_cast<int>(sendResult) != SOCKET_ERROR);
 }
 
-bool Server::startRecvData(SOCKET socket, std::vector<char> &dataOutput, size_t size)
+bool Server::recvData(SOCKET socket, std::vector<char> &dataOutput, size_t size)
 {
     if(dataOutput.size() < size){
         dataOutput.resize(size);
@@ -448,45 +521,35 @@ bool Server::startRecvData(SOCKET socket, std::vector<char> &dataOutput, size_t 
     return true;
 }
 
-void Server::sendData(std::vector<char> &data, SOCKET socket, TypePacket type,bool fillHeader)
+void Server::packetHandler(const Packet &packet)
 {
-  if(type != TypePacket::UNKNOWN && fillHeader){
+  switch (packet.type()) {
 
-    uint8_t sizeHeader = Data::sizeHeader(type);
-    bool memReserve = false;
 
-    if( sizeHeader <= data.size()){
-      for(uint8_t i = 0; i < sizeHeader; ++i){
-        if(data.at(i) == '\0'){
-          memReserve = true;
-        }else{
-          memReserve = false;
-          break;
-        }
-      }
-    }
-
-    if(!memReserve){ //не оставили память для заголовка
-      std::vector<char> header;
-      Data::fillHeader(header,type,data.size());
-      data.insert(data.cbegin(),header.begin(),header.end());
-    }else{
-      Data::fillHeader(data,type,data.size() - Data::sizeHeader(type));
-    }
+  case TypePacket::INFO_CLIENT:{
+    addClientInfo(packet);
+    break;
   }
 
-  sendData(socket,data);
+  //...another Packet
+
+    default:
+
+    break;
+
+  }
 }
 
-void Server::sendData(SOCKET socket, const std::vector<char> &data)
+
+void Server::sendData(SOCKET socket, const Packet &packet)
 {
   auto it = m_queueSendData.find(socket);
 
   if(it != m_queueSendData.end()) {
-    it->second.emplace(data);
+    it->second.emplace(packet);
   }else{
-    auto it = m_queueSendData.insert(std::make_pair(socket,std::queue<std::vector<char>>{}));
-    it.first->second.emplace(data);
+    auto it = m_queueSendData.insert(std::make_pair(socket,std::queue<Packet>{}));
+    it.first->second.emplace(packet);
     }
 }
 
