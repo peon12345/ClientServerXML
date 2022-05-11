@@ -166,31 +166,10 @@ void MainWindow::setEnableButtons(bool isEnable)
   ui->pushButtonStop->setEnabled(isEnable);
 }
 
+void MainWindow::on_pushButtonStop_clicked()
+{
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+}
 
 
 

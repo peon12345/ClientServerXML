@@ -23,6 +23,7 @@ public:
   Server& operator = (Server&&) = delete;
 
   void initServer(const std::string& ip,ushort port,const uint maxConnect = DEFAULT_MAX_CONNECT);
+  void close();
 
   void startListen(bool listenNewConnect = true, bool listenClientSocket = true);
   void stopListenConnects();

@@ -27,6 +27,8 @@ private slots:
   void on_pushButtonLoadXml_clicked();
   void addNewClient(const QString& name);
 
+  void on_pushButtonStop_clicked();
+
 private:
   void xmlHandler(const QDomDocument& xmlDoc);
   void fillForm(const XmlData& xmlData);

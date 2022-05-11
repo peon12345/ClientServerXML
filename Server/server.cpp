@@ -61,6 +61,14 @@ void Server::initServer(const std::string &ip, ushort port, const uint maxConnec
   m_maxConnection = maxConnect;
 }
 
+void Server::close()
+{
+  m_flagListenClientData = false;
+  m_flagListenClientData = false;
+  closesocket(m_listenSocket);
+  WSACleanup();
+}
+
 void Server::startListen(bool listenNewConnect,bool listenClientSocket)
 {
 

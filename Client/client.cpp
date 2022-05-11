@@ -1,6 +1,6 @@
 #include "client.h"
 #include <QDebug>
-
+#include "../DataStruct/datastruct.cpp"
 
 
 Client::Client() : m_status(ClientStatus::DISCONNECTED)
