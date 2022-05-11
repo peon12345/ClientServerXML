@@ -63,6 +63,7 @@ private:
   void recvInfoPacket(SOCKET socket);
   void recvDataPacket(SOCKET socket,bool isPrivate = false);
   void startSendData(SOCKET socket,std::vector<char>& data);
+  bool startRecvData(SOCKET socket ,std::vector<char>& dataOutput , size_t size);
 
   std::optional<QString> findNameBySocket(SOCKET socket);
   std::optional<SOCKET> findSocketByName(const QString& name);

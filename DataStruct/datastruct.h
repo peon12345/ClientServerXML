@@ -6,6 +6,7 @@
 #include <uchar.h>
 #include <algorithm>
 #include <array>
+#include <QString>
 
 enum class TypePacket : int8_t {
   INFO_CLIENT,
@@ -19,118 +20,6 @@ enum class TypeDataAccess : int8_t {
   PRIVATE_DATA,
 };
 
-
-
-inline constexpr int LEN_TYPE_PACKET = 1;
-inline constexpr int LEN_COUNT_NAME = 1;
-inline constexpr int LEN_SIZE_DATA_INFO = 4;
-
-namespace Data {
-
-  inline uint8_t sizeHeader(TypePacket type){
-
-    switch(type) {
-      case TypePacket::INFO_CLIENT: {
-          return LEN_TYPE_PACKET;
-          break;
-        }
-
-      case TypePacket::MESSAGE: {
-          return LEN_TYPE_PACKET + LEN_SIZE_DATA_INFO;
-          break;
-        }
-
-      case TypePacket::PRIVATE_DATA: {
-
-          return LEN_TYPE_PACKET +  LEN_COUNT_NAME +  LEN_SIZE_DATA_INFO;
-        }
-
-      default:{
-
-          return  LEN_TYPE_PACKET + LEN_SIZE_DATA_INFO;
-        }
-      }
-  }
-
-
-  inline void fillHeader(std::vector<char>& data,TypePacket type,int size = -1){
-
-
-    int index = 0;
-    if(data.empty()){
-        data.resize(sizeHeader(type));
-      }
-
-    data.at(index++) = static_cast<char>(type);
-
-    switch (type) {
-
-      case TypePacket::IMAGE:
-      case TypePacket::MESSAGE: { //добавляем информацию о длине
-
-
-
-          if(size >0){
-
-              if(data.size() < LEN_SIZE_DATA_INFO){
-                  data.resize(data.size() + (LEN_SIZE_DATA_INFO - data.size()) );
-                }
-
-              for(int i = 0;i< LEN_SIZE_DATA_INFO;++i){
-
-                  if(size > 255){
-                      data.at(index++) = -1;
-                      size -= 255;
-                    }else if(size > 0){
-                      data.at(index++) = size;
-                      size -= 255;
-                    } else{
-                      data.at(index++) = 0;
-                    }
-                }
-            }
-          break;
-        }
-
-
-      default:
-        break;
-      }
-  }
-
-  inline size_t accumulateSize(const std::vector<char>& sizeBuf){
-    size_t size =0;
-    std::for_each(sizeBuf.begin(), sizeBuf.end(), [&size](const char c){ size += static_cast<unsigned char>(c); });
-    return size;
-  }
-
-  inline bool recvData(SOCKET socket ,std::vector<char>& dataOutput , size_t size){
-
-    if(dataOutput.size() < size){
-        dataOutput.resize(size);
-      }
-
-    int total = 0;
-    int resultRecv = 0;
-    int sizeLeft = size;
-
-    while(total < sizeLeft) {
-        resultRecv = recv(socket,dataOutput.data(),sizeLeft,0);
-
-        if (resultRecv == 0) {
-            break;
-          }else if(resultRecv < 0){
-
-            return false;
-          }
-
-        total += resultRecv;
-        sizeLeft -= resultRecv;
-      }
-    return true;
-  }
-
-}
 
 class ClientInfo final {
 public:
@@ -164,32 +53,137 @@ private:
 };
 
 
-class PacketInfo final{
+class PacketHeader {
 public:
-  PacketInfo();
-  PacketInfo(TypePacket type,TypeDataAccess typeAccess,std::array<uint8_t,4> size); // конструктор для обычного сообщения
+  PacketHeader();
 
-  ~PacketInfo() = default;
+  PacketHeader(const std::vector<char>& headerData);
+  PacketHeader(TypePacket type,TypeDataAccess typeAccess,std::array<uint8_t,4> size); // конструктор для обычного сообщения
 
+ virtual ~PacketHeader() = default;
+ void setHeaderData(const std::vector<char>& headerData);
  void setTypePacket(TypePacket typePacket);
  void setTypeDataAcces(TypeDataAccess typeAcces);
  void setSize(const std::array<uint8_t,4>& size);
  void setSize(const std::vector<char>& size);
- bool isValid();
+ void setSize(int size);
+ void setMetaData(const std::vector<char>& metaData);
+ void setReceivers(const std::vector<QString>& receivers );
+ bool isValid() const;
 
- operator char*();
+ virtual std::vector<char> convertToVector() const;
+
+ static uint8_t sizeHeader(TypePacket type, TypeDataAccess typeAccess = TypeDataAccess::PUBLIC_DATA, int countReceivers = 0);
+
+ TypePacket type() const;
+public:
+ static constexpr int LEN_TYPE_PACKET = 1;
+ static constexpr int LEN_COUNT_NAME = 1;
+ static constexpr int LEN_SIZE_DATA_INFO = 4;
+ static constexpr int LEN_FORMAT_IMAGE = 3;
+
 private:
   TypePacket m_typePacket;
   TypeDataAccess m_typeDataAcces;
   std::array<uint8_t,4> m_sizeData;
 
-  uint8_t countReceiver;
-  std::vector<std::array<char,ClientInfo::MAX_LENGHT_NAME>> m_receivers;
+  uint8_t m_countReceiver;
+  std::vector<QString> m_receivers;
 
-
-  uint8_t sizeMetaData;
+  uint8_t m_sizeMetaData;
   std::vector<char> m_metaData;
 };
+
+
+class Packet : public PacketHeader {
+
+public:
+  Packet() = default;
+  Packet(const std::vector<char>& dataWithHeader);
+
+  void setDataWithHeader(const std::vector<char>& dataWithHeader);
+  std::vector<char> convertToVector() const override;
+
+  void setData(const std::vector<char>& data);
+  void setData(std::vector<char>&& data);
+private:
+  std::vector<char> m_data;
+};
+
+
+namespace Data {
+
+  inline bool fillHeader(std::vector<char>& data,TypePacket type,
+                         int size = -1 , TypeDataAccess typeAccess = TypeDataAccess::PUBLIC_DATA , const std::vector<QString>& receivers = std::vector<QString>()){
+
+   PacketHeader packetHeader;
+
+   switch (type) {
+
+     case TypePacket::INFO_CLIENT:{
+       packetHeader.setTypePacket(type);
+       break;
+       }
+
+     case TypePacket::MESSAGE:
+     case TypePacket::IMAGE:{
+         packetHeader.setTypePacket(type);
+         packetHeader.setTypeDataAcces(typeAccess);
+         packetHeader.setSize(size);
+
+         if(type == TypePacket::IMAGE){
+         static std::vector<char> formatImage {'b','m','p'};
+
+         packetHeader.setMetaData(formatImage);
+         }
+       }
+
+      case TypePacket::UNKNOWN:{
+
+       return false;
+       }
+
+     }
+
+   switch (typeAccess) {
+
+     case TypeDataAccess::PRIVATE_DATA:{
+
+       if(!receivers.empty()){
+         packetHeader.setReceivers(receivers);
+
+         }
+       }
+
+     default: {
+
+       break;
+       }
+
+     }
+
+
+
+   if(!packetHeader.isValid()){
+     return false;
+     }
+
+   std::vector<char> temp = packetHeader.convertToVector();
+   data.insert(data.begin(),temp.begin(),temp.end());
+
+   return true;
+
+  }
+
+  inline size_t accumulateSize(const std::vector<char>& sizeBuf){
+    size_t size =0;
+    std::for_each(sizeBuf.begin(), sizeBuf.end(), [&size](const char c){ size += static_cast<unsigned char>(c); });
+    return size;
+  }
+
+
+}
+
 
 
 

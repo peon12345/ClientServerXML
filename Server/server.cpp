@@ -419,7 +419,33 @@ void Server::startSendData(SOCKET socket, std::vector<char> &data)
   do{
     sizeData =  data.size();
     sendResult = send(socket,data.data(),sizeData,0);
-  }while(sendResult < sizeData || static_cast<int>(sendResult) != SOCKET_ERROR);
+    }while(sendResult < sizeData || static_cast<int>(sendResult) != SOCKET_ERROR);
+}
+
+bool Server::startRecvData(SOCKET socket, std::vector<char> &dataOutput, size_t size)
+{
+    if(dataOutput.size() < size){
+        dataOutput.resize(size);
+      }
+
+    int total = 0;
+    int resultRecv = 0;
+    int sizeLeft = size;
+
+    while(total < sizeLeft) {
+        resultRecv = recv(socket,dataOutput.data(),sizeLeft,0);
+
+        if (resultRecv == 0) {
+            break;
+          }else if(resultRecv < 0){
+
+            return false;
+          }
+
+        total += resultRecv;
+        sizeLeft -= resultRecv;
+      }
+    return true;
 }
 
 void Server::sendData(std::vector<char> &data, SOCKET socket, TypePacket type,bool fillHeader)
