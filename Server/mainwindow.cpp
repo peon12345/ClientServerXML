@@ -24,9 +24,8 @@ MainWindow::MainWindow(QWidget *parent)
   ui->listViewConnectedClients->setModel(m_modelNewConnections);
   ui->listViewConnectedClients->setEditTriggers(QAbstractItemView::NoEditTriggers);
 
-
-
   connect(&m_server,&Server::clientConnected,this,&MainWindow::addNewClient);
+  connect(&m_server,&Server::clientChangedName,this,&MainWindow::updateNameClient);
 }
 
 MainWindow::~MainWindow()
@@ -42,7 +41,7 @@ void MainWindow::on_pushButtonStart_clicked()
 
     m_server.initServer(ui->lineEditIP->text().toStdString(),ui->lineEditPort->text().toInt());
 
-  }catch(const QString& str){
+  }catch(const char* str){
     QMessageBox msg;
     msg.setInformativeText("Error start server!");
     msg.setText(str);
@@ -91,11 +90,11 @@ void MainWindow::on_pushButtonLoadXml_clicked()
 void MainWindow::addNewClient(const QString &name)
 {
   if(m_modelNewConnections){
-  if(m_modelNewConnections->insertRow(m_modelNewConnections->rowCount())) {
+    if(m_modelNewConnections->insertRow(m_modelNewConnections->rowCount())) {
       QModelIndex index = m_modelNewConnections->index(m_modelNewConnections->rowCount() - 1, 0);
-      m_modelNewConnections->setData(index, name);
-  }
+      m_modelNewConnections->setData(index, name.toUtf8());
     }
+  }
 
 }
 
@@ -120,8 +119,8 @@ void MainWindow::xmlHandler(const QDomDocument &xmlDoc)
   }
 
 
-  //...
-  //другие XML форматы
+       //...
+       //другие XML форматы
 
   default:
 
@@ -191,7 +190,7 @@ void MainWindow::sendXmlData(const std::list<std::pair<QString, QByteArray> > &d
 
       if(packet.isValid()){
 
-        m_server.sendData(0,packet);
+        m_server.sendPacket(0,packet);
 
       }
 
@@ -220,7 +219,7 @@ void MainWindow::sendXmlData(const std::list<std::pair<QString, QByteArray> > &d
     packet.setReceivers(receivers);
 
     if(packet.isValid()){
-        m_server.sendData(0,packet);
+      m_server.sendPacket(0,packet);
     }
   }
 }
@@ -230,6 +229,10 @@ void MainWindow::setEnableButtons(bool isEnable)
   ui->pushButtonLoadXml->setEnabled(isEnable);
   ui->pushButtonDisconnectClient->setEnabled(isEnable);
   ui->pushButtonStop->setEnabled(isEnable);
+
+  ui->lineEditIP->setEnabled(!isEnable);
+  ui->lineEditPort->setEnabled(!isEnable);
+  ui->pushButtonStart->setEnabled(!isEnable);
 }
 
 void MainWindow::on_pushButtonStop_clicked()
@@ -237,6 +240,23 @@ void MainWindow::on_pushButtonStop_clicked()
   m_server.close();
 
   setEnableButtons(false);
+  ui->textEdit->clear();
+  ui->imageView->clear();
+  m_modelNewConnections->removeRows( 0, m_modelNewConnections->rowCount() );
+}
+
+void MainWindow::updateNameClient(const QString &oldName, const QString &newName)
+{
+
+  for( int i = 0; i<  m_modelNewConnections->rowCount(); ++i){
+
+    QModelIndex index = m_modelNewConnections->index(i, 0);
+
+    if(oldName == index.data(Qt::DisplayRole).toString()){
+
+      m_modelNewConnections->setData(index,newName.toLocal8Bit());
+    }    
+  }
 }
 
 

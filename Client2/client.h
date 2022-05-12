@@ -10,16 +10,17 @@
 
 class Client : public QObject , public DataHandler
 {
+  Q_OBJECT
 public:
-  Client();
-  Client(const std::string& name);
+  Client() = default;
   virtual ~Client();
 
   void connectToServer(const std::string &ip, const std::string &port);
   void disconnect();
   void listenServer();
-
   void sendToServer(const Packet& packet);
+
+  void setName(const QString& name);
 private:
   enum class ClientStatus {
     DISCONNECTED,
@@ -33,7 +34,10 @@ private:
   void packetHandler(SOCKET socket,const Packet& packet) override;
 private:
   void sendClientInfo();
+  void emitPackageReceived(const Packet& packet);
+signals:
 
+void packageReceived(const Packet& packet);
 };
 
 #endif // CLIENT_H

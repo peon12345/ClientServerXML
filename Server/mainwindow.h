@@ -28,6 +28,7 @@ private slots:
   void addNewClient(const QString& name);
 
   void on_pushButtonStop_clicked();
+  void updateNameClient(const QString& oldName, const QString& newName);
 
 private:
   void xmlHandler(const QDomDocument& xmlDoc);

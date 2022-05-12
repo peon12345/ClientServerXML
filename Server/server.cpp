@@ -1,17 +1,10 @@
 #include "server.h"
 #include "../DataStruct/datastruct.cpp"
 #include "../DataStruct/datahandler.cpp"
-
+#include <thread>
 Server::~Server()
 {
-  closesocket(m_listenSocket);
-
-  for( const auto &[socket , info] : m_connectedClients ){
-
-    delete info;
-    disconnectClientSocket(socket);
-  }
-  WSACleanup();
+  close();
 }
 
 void Server::initServer(const std::string &ip, ushort port, const uint maxConnect)
@@ -67,6 +60,7 @@ void Server::close()
   m_flagListenClientData = false;
   m_flagListenClientData = false;
   closesocket(m_listenSocket);
+  disconnectAll();
   WSACleanup();
 }
 
@@ -83,11 +77,23 @@ void Server::startListen(bool listenNewConnect,bool listenClientSocket)
     fd_set fdSetReady;
     fd_set fdSetWrite;
     fd_set fdSetError;
+    TIMEVAL tv{};
+    tv.tv_sec = 5;
 
     while(m_flagListenConnects || m_flagListenClientData){
+
+      std::unique_lock ulk(m_mutexStartListen);
+      if(m_needWaitData){
+        qDebug() << m_continueListen;
+      m_cvListen.wait(ulk,[&b = m_continueListen]{return b == true;});
+        qDebug() << "waitOK";
+      m_needWaitData = false;
+      }
+
       FD_ZERO(&fdSetReady);
       FD_ZERO(&fdSetWrite);
       FD_ZERO(&fdSetError);
+
 
       if(m_flagListenConnects){
         FD_SET(m_listenSocket,&fdSetReady);
@@ -115,17 +121,18 @@ void Server::startListen(bool listenNewConnect,bool listenClientSocket)
         FD_SET(socket,&fdSetError);
 
         if(checkSendAllSocket){
-          FD_SET(socket,&fdSetWrite);
+         FD_SET(socket,&fdSetWrite);
         }
       }
 
-      int totalSocket = select(0,&fdSetReady,&fdSetWrite,&fdSetError,NULL);
+      int totalSocket = select(0,&fdSetReady,&fdSetWrite,&fdSetError,&tv);
 
-      if(totalSocket == 0){
-        continue;
+      for(SOCKET socket : waitingDisconnectSocket){
+        disconnectClientSocket(socket);
       }
-      else if(totalSocket == SOCKET_ERROR){
-        return void();
+
+      if((totalSocket == 0 || totalSocket == SOCKET_ERROR) || (fdSetReady.fd_count == 0 && m_queueSendData.empty())){
+        continue;
       }
 
 
@@ -156,6 +163,10 @@ void Server::startListen(bool listenNewConnect,bool listenClientSocket)
         }
       }
 
+      if(m_connectedClients.empty()){
+        continue;
+      }
+
       if(m_flagListenClientData){
 
         for(size_t i = 0; i < m_connectedClients.size();++i ){
@@ -173,7 +184,7 @@ void Server::startListen(bool listenNewConnect,bool listenClientSocket)
 
             try{
               recvPacket(m_connectedClients.at(i).first);
-            }catch(const QString& str){
+            }catch(const char* str){
 
               disconnectClientSocket(m_connectedClients.at(i).first);
             }
@@ -193,23 +204,22 @@ void Server::startListen(bool listenNewConnect,bool listenClientSocket)
 
                 auto it = std::find_if(itCommonData->second.front().getReceivers().begin(),itCommonData->second.front().getReceivers().end(),
                                        [&connectedClients = m_connectedClients,i](const QString& name){
-
-                                         return name == QString::fromLocal8Bit(connectedClients.at(i).second->getName().c_str());
+                                         qDebug() << "compare:" << name.toLocal8Bit();
+                                         qDebug() << QString::fromStdString(connectedClients.at(i).second->getName());
+                                         return name == QString::fromStdString(connectedClients.at(i).second->getName());
 
                 });
 
                 if(it != itCommonData->second.front().getReceivers().end()){
+
                   sendData(m_connectedClients.at(i).first,itCommonData->second.front());
+
                 }
 
               }else{
                 sendData(m_connectedClients.at(i).first,itCommonData->second.front());
 
               }
-
-
-
-
 
             }
 
@@ -241,7 +251,7 @@ void Server::startListen(bool listenNewConnect,bool listenClientSocket)
                    //данные, которые должны были быть отправлены всем
                    //делим на конкретных клиентов, которым не удалось отправить
 
-                sendData(m_connectedClients.at(i).first,it->second.front());
+                sendPacket(m_connectedClients.at(i).first,it->second.front());
               }
 
             }
@@ -252,7 +262,6 @@ void Server::startListen(bool listenNewConnect,bool listenClientSocket)
           //но пока не были отправлены
         }
       }
-
     }
 
   } );
@@ -271,26 +280,22 @@ void Server::stopListenClientSocket()
   m_flagListenClientData = false;
 }
 
-
-
-
-
 //если клиент инфо, кастить в клиент инфо
 void Server::addClientInfo(SOCKET socket, const Packet &packet)
 {
-
-
   ClientInfo* clientInfo = new ClientInfo();
 
-  std::vector<char> temp = packet.getData();
-  memcpy(*&clientInfo, temp.data(), sizeof(ClientInfo));
+  memcpy(*&clientInfo, packet.getData().data(), sizeof(ClientInfo));
 
      //сохраним информацию клиента, привяжем к сокету
   auto it = std::find_if(m_connectedClients.begin() , m_connectedClients.end() ,[socket] (const std::pair<SOCKET,ClientInfo*>& pair)  {
     return  pair.first ==  socket;  });
 
 
+  QString oldName;
   if(it != m_connectedClients.end()){
+
+    oldName = QString::fromLocal8Bit(it->second->getName().c_str());
 
     if(it->second){
       delete it->second;
@@ -300,15 +305,12 @@ void Server::addClientInfo(SOCKET socket, const Packet &packet)
 
     it->second = clientInfo;
 
+     emit clientChangedName(oldName,QString::fromLocal8Bit(clientInfo->getName().c_str()).toUtf8());
+
   }else{
     delete clientInfo;
   }
 }
-
-
-
-
-
 
 
 void Server::packetHandler(SOCKET socket, const Packet &packet)
@@ -334,8 +336,12 @@ void Server::packetHandler(SOCKET socket, const Packet &packet)
 }
 
 
-void Server::sendData(SOCKET socket, const Packet &packet)
+void Server::sendPacket(SOCKET socket, const Packet &packet)
 {
+  qDebug() << "sendPacket" << static_cast<char>(packet.type());
+
+  m_needWaitData = true;
+  m_continueListen = false;
 
   auto it = m_queueSendData.find(socket);
 
@@ -346,7 +352,8 @@ void Server::sendData(SOCKET socket, const Packet &packet)
     it.first->second.emplace(packet);
     }
 
-
+  m_continueListen = true;
+  m_cvListen.notify_one();
 }
 
 void Server::disconnectClientByName(const QString &name)
@@ -359,17 +366,21 @@ void Server::disconnectClientByName(const QString &name)
     return (nameStd == pair.second->getName());
 
     });
-
   if(it != m_connectedClients.end()){
-    disconnectClientSocket(it->first);
-    }
+  waitingDisconnectSocket.push_back(it->first);
+  }
 }
 
 
 void Server::disconnectClientSocket(SOCKET socket)
 {
-  //надо здесь мьютекс , в листен будет ошибка
-  //здесь дожидаемся конца цикла в другом потоке
+//  надо здесь мьютекс , в листен будет ошибка
+//  здесь дожидаемся конца цикла в другом потоке
+
+  if(shutdown(socket,SD_BOTH ) != SOCKET_ERROR){
+
+    closesocket(socket);
+  }
 
   auto it = std::find_if(m_connectedClients.begin(),
                          m_connectedClients.end(),
@@ -382,8 +393,6 @@ void Server::disconnectClientSocket(SOCKET socket)
     m_queueSendData.erase(socket);
   }
 
-  shutdown(socket,SD_BOTH);
-  closesocket(socket);
 }
 
 void Server::newClientConnectHandler(SOCKET newConnection)
@@ -391,14 +400,7 @@ void Server::newClientConnectHandler(SOCKET newConnection)
   static const std::string connectedStr = "Server: Connection completed!";
   static const std::vector<char> message(connectedStr.begin(),connectedStr.end());
 
-  static Packet packet;
 
-  if(!packet.isValid()){
-  packet.setTypePacket(TypePacket::MESSAGE);
-  packet.setData(message);
-  }
-
-  sendData(newConnection,packet);
   //клиент еще не назвал свое имя, назовем его
 
   auto it = std::find_if(m_connectedClients.begin(),m_connectedClients.end(),[newConnection] (const std::pair<SOCKET,ClientInfo*>& pair) {
@@ -417,8 +419,29 @@ void Server::newClientConnectHandler(SOCKET newConnection)
      ClientInfo* clientInfo = new ClientInfo(name.toStdString());
      it->second = clientInfo;
 
+
+     static Packet packet;
+
+     if(!packet.isValid()){
+       packet.setTypePacket(TypePacket::MESSAGE);
+       packet.setTypeDataAccess(TypeDataAccess::PRIVATE_DATA);
+       packet.appendReceiver(QString::fromLocal8Bit(it->second->getName().c_str()));
+       packet.setData(message);
+     }
+
+     sendPacket(newConnection,packet);
+
+
      m_counterUnknownClients++;
      emit clientConnected(name);
+  }
+}
+
+void Server::disconnectAll()
+{
+  for( const auto &[socket , info] : m_connectedClients ){
+    delete info;
+    disconnectClientSocket(socket);
   }
 }
 

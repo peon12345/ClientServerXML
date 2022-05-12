@@ -4,12 +4,6 @@
 #include "../DataStruct/datahandler.cpp"
 
 
-Client::Client() : m_status(ClientStatus::DISCONNECTED)
-{
-
-}
-
-
 Client::~Client()
 {
   disconnect();
@@ -62,16 +56,20 @@ void Client::connectToServer(const std::string& ip,const std::string& port)
 void Client::disconnect()
 {
   WSACleanup();
-  shutdown(m_connection,SD_BOTH);
-  closesocket(m_connection);
-  m_connection = INVALID_SOCKET;
-  m_status = ClientStatus::DISCONNECTED;
+  if(shutdown(m_connection,SD_BOTH) != SOCKET_ERROR){
+
+    if( closesocket(m_connection) != SOCKET_ERROR) {
+
+
+    m_connection = INVALID_SOCKET;
+    m_status = ClientStatus::DISCONNECTED;
+    }
+  }
 }
 
 void Client::listenServer()
 {
   std::thread t( [&] () {
-
 
     while(m_status == ClientStatus::CONNECTED){ // цикл пока коннект
 
@@ -79,12 +77,11 @@ void Client::listenServer()
 
         recvPacket(m_connection);
 
-      } catch(const QString& str){
+      } catch(const char* str){
         qDebug() << str;
         disconnect();
       }
     }
-
   });
 
   t.detach();
@@ -95,20 +92,26 @@ void Client::sendToServer(const Packet &packet)
   sendData(m_connection,packet);
 }
 
+void Client::setName(const QString &name)
+{
+  m_clientInfo.setName(name.toStdString());
+}
+
 void Client::packetHandler(SOCKET socket, const Packet &packet)
 {
   Q_UNUSED(socket);
 
+   emitPackageReceived(packet);
+
   switch (packet.type()) {
   case TypePacket::MESSAGE:{
-
 
 
     break;
   }
 
   case TypePacket::IMAGE:{
-
+    qDebug() << "image";
     break;
   }
 
@@ -130,6 +133,11 @@ void Client::sendClientInfo()
   packet.setData(std::move(data));
 
   sendToServer(packet);
+}
+
+void Client::emitPackageReceived(const Packet &packet)
+{
+  emit packageReceived(packet);
 }
 
 

@@ -5,51 +5,42 @@
 #include <winsock2.h>
 #include <uchar.h>
 #include <algorithm>
-#include <array>
 #include <QString>
+#include <array>
 
 enum class TypePacket : int8_t {
   INFO_CLIENT,
   MESSAGE,
   IMAGE,
+  COMMAND,
   UNKNOWN,
 };
 
 enum class TypeDataAccess : int8_t {
   PUBLIC_DATA,
   PRIVATE_DATA,
+  UNKNOWN
 };
 
 
 class ClientInfo final {
 public:
-  ClientInfo()  {
-    setName("Anonim Anonimovich");
-
-  }
-  ClientInfo(const std::string& name){
-    setName(name);
-  }
+  ClientInfo();
+  ClientInfo(const std::string& name);
 
   ~ClientInfo() = default;
 
-  void setName(const std::string& name){
+  void setName(const std::string& name);
 
-    strcpy(m_name,name.c_str());
-    memset(m_name + name.length(), '~', MAX_LENGHT_NAME);
-    m_lenName = name.length();
-  }
+  std::string getName() const;
 
-  std::string getName() const{
-    return std::string(m_name, m_lenName);
-  }
 
 public:
   static constexpr size_t MAX_LENGHT_NAME = 24;
 private:
 
   uint8_t m_lenName;
-  char m_name[MAX_LENGHT_NAME];
+  std::array<char,MAX_LENGHT_NAME> m_name;
 };
 
 
@@ -79,14 +70,15 @@ public:
  void setHeaderData(const std::vector<char>& headerData);
  void setTypePacket(TypePacket typePacket);
  void setTypeDataAccess(TypeDataAccess typeAccess);
- void setSize(const std::vector<char>& size);
- void setSize(int size);
+ void setSize(const std::vector<char>& size,bool withHeader = false);
+ void setSize(int size,bool withHeader = false);
  void setMetaData(const std::vector<char>& metaData);
  void setReceivers(const std::vector<QString>& receivers );
  void appendReceiver(const QString& name );
  bool isValid() const;
 
  const std::vector<QString>& getReceivers() const ;
+ const std::vector<char>& getMetaData() const ;
 
 private:
   TypePacket m_typePacket;
@@ -98,6 +90,8 @@ private:
 
   uint8_t m_sizeMetaData;
   std::vector<char> m_metaData;
+protected:
+  int m_offset;
 };
 
 
@@ -105,6 +99,7 @@ class Packet : public PacketHeader {
 
 public:
   Packet() = default;
+  ~Packet() override = default;
   explicit Packet(const std::vector<char>& dataWithHeader);
 
   void setDataWithHeader(const std::vector<char>& dataWithHeader);
@@ -114,7 +109,7 @@ public:
   void setData(const QByteArray& array);
   void setData(std::vector<char>&& data);
 
-  const std::vector<char> getData() const;
+  const std::vector<char> &getData() const;
 
 private:
   std::vector<char> m_data;

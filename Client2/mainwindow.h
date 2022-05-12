@@ -1,8 +1,10 @@
 #ifndef MAINWINDOW_H
 #define MAINWINDOW_H
 
+
+#include "client.h"
 #include <QMainWindow>
-#include <client.h>
+
 
 QT_BEGIN_NAMESPACE
     namespace Ui { class MainWindow; }
@@ -20,10 +22,11 @@ private slots:
 
   void on_pushButtonConnect_clicked();
 
+  void on_pushButtonRefresh_clicked();
+  void fillForm(const Packet& packet);
 private:
   Client m_client;
   void setEnableButtons(bool isEnable);
-
   Ui::MainWindow *ui;
 };
 #endif // MAINWINDOW_H

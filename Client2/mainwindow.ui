@@ -22,7 +22,7 @@
         <item>
          <widget class="QLineEdit" name="lineEditIP">
           <property name="placeholderText">
-           <string>IP</string>
+           <string>ip</string>
           </property>
          </widget>
         </item>

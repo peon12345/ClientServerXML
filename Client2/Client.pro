@@ -10,8 +10,8 @@ LIBS += -lWs2_32
 
 SOURCES += \
     client.cpp \
-    main.cpp \
-    mainwindow.cpp
+    mainwindow.cpp\
+    main.cpp
 
 HEADERS += \
     client.h \
