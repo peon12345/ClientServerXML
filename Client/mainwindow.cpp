@@ -8,9 +8,11 @@ MainWindow::MainWindow(QWidget *parent)
 {
   ui->setupUi(this);
 
-  ui->ipLine->setText("127.0.0.1");
-  ui->portLine->setText("1112");
+  ui->lineEditIP->setText("127.0.0.1");
+  ui->lineEditPort->setText("8005");
 
+  ui->imageView->setAlignment(Qt::AlignCenter);
+  setEnableButtons(false);
 }
 
 MainWindow::~MainWindow()
@@ -18,38 +20,32 @@ MainWindow::~MainWindow()
   delete ui;
 }
 
-
-void MainWindow::on_connectButton_clicked()
+void MainWindow::setEnableButtons(bool isEnable)
 {
-  try{
-    m_client.connectToServer(ui->ipLine->text().toLocal8Bit().constData(),ui->portLine->text().toLocal8Bit().constData());
+  ui->pushButtonRefresh->setEnabled(isEnable);
+  ui->pushButtonDisconnect->setEnabled(isEnable);
+
+
+  ui->lineEditIP->setEnabled(!isEnable);
+  ui->lineEditPort->setEnabled(!isEnable);
+  ui->lineEditName->setEnabled(!isEnable);
+
+  ui->pushButtonConnect->setEnabled(!isEnable);
+}
+
+
+
+
+void MainWindow::on_pushButtonConnect_clicked()
+{
+  //try{
+    m_client.connectToServer(ui->lineEditIP->text().toStdString(),ui->lineEditPort->text().toStdString());
     m_client.listenServer();
-  }
+    setEnableButtons(true);
 
-  catch(const char* exeption){
+//  }catch(const QString& str){
 
-    qDebug() << exeption;
-    return void();
-  }
-}
-
-
-void MainWindow::on_disconnectButton_clicked()
-{
-
-}
-
-
-void MainWindow::on_pushButton_2_clicked()
-{
-  QByteArray ba = ui->messageLine_2->text().toLocal8Bit();
-
-  std::vector<char> data(Data::sizeHeader(TypePacket::DATA));
-  data.insert(data.end(),ba.begin(),ba.end());
-
-  if(!m_client.sendToServer(data,TypePacket::DATA,true)){
-    qDebug() << "SEND ERROR";
-  }
-
+//    ui->textEdit->setText(str);
+//  }
 }
 

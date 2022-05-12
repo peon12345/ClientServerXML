@@ -40,16 +40,23 @@
          </widget>
         </item>
         <item>
-         <widget class="QPushButton" name="pushButtonStart">
-          <property name="text">
-           <string>start</string>
+         <widget class="QLineEdit" name="lineEditName">
+          <property name="placeholderText">
+           <string>name</string>
           </property>
          </widget>
         </item>
         <item>
-         <widget class="QPushButton" name="pushButtonStop">
+         <widget class="QPushButton" name="pushButtonConnect">
           <property name="text">
-           <string>stop</string>
+           <string>connect</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="pushButtonDisconnect">
+          <property name="text">
+           <string>disconnect</string>
           </property>
          </widget>
         </item>
@@ -67,51 +74,6 @@
     <item row="1" column="0">
      <layout class="QHBoxLayout" name="horizontalLayout_2">
       <item>
-       <layout class="QVBoxLayout" name="verticalLayout">
-        <item>
-         <widget class="QListView" name="listViewConnectedClients">
-          <property name="sizePolicy">
-           <sizepolicy hsizetype="Minimum" vsizetype="Expanding">
-            <horstretch>0</horstretch>
-            <verstretch>0</verstretch>
-           </sizepolicy>
-          </property>
-          <property name="minimumSize">
-           <size>
-            <width>50</width>
-            <height>50</height>
-           </size>
-          </property>
-          <property name="maximumSize">
-           <size>
-            <width>100</width>
-            <height>16777215</height>
-           </size>
-          </property>
-         </widget>
-        </item>
-        <item>
-         <widget class="QPushButton" name="pushButtonDisconnectClient">
-          <property name="minimumSize">
-           <size>
-            <width>50</width>
-            <height>0</height>
-           </size>
-          </property>
-          <property name="maximumSize">
-           <size>
-            <width>100</width>
-            <height>16777215</height>
-           </size>
-          </property>
-          <property name="text">
-           <string>disconnect</string>
-          </property>
-         </widget>
-        </item>
-       </layout>
-      </item>
-      <item>
        <layout class="QVBoxLayout" name="verticalLayout_2">
         <item>
          <widget class="QLabel" name="imageView">
@@ -122,7 +84,7 @@
            </sizepolicy>
           </property>
           <property name="text">
-           <string>fffffgggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggfzfgGgggggggggggggggggggggggggggggggggggg</string>
+           <string/>
           </property>
          </widget>
         </item>
@@ -152,9 +114,9 @@
          </widget>
         </item>
         <item>
-         <widget class="QPushButton" name="pushButtonLoadXml">
+         <widget class="QPushButton" name="pushButtonRefresh">
           <property name="text">
-           <string>load XML</string>
+           <string>Refresh</string>
           </property>
          </widget>
         </item>

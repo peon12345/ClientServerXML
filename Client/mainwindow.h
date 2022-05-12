@@ -17,15 +17,12 @@ class MainWindow : public QMainWindow
   ~MainWindow();
 
 private slots:
-  void on_connectButton_clicked();
 
-  void on_disconnectButton_clicked();
-
-  void on_pushButton_2_clicked();
+  void on_pushButtonConnect_clicked();
 
 private:
   Client m_client;
-
+  void setEnableButtons(bool isEnable);
 
   Ui::MainWindow *ui;
 };

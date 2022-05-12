@@ -1,6 +1,7 @@
 #include "client.h"
 #include <QDebug>
 #include "../DataStruct/datastruct.cpp"
+#include "../DataStruct/datahandler.cpp"
 
 
 Client::Client() : m_status(ClientStatus::DISCONNECTED)
@@ -8,9 +9,6 @@ Client::Client() : m_status(ClientStatus::DISCONNECTED)
 
 }
 
-Client::Client(const std::string& name) : m_status(ClientStatus::DISCONNECTED),m_infoToServer(name)
-{
-}
 
 Client::~Client()
 {
@@ -20,7 +18,7 @@ Client::~Client()
 void Client::connectToServer(const std::string& ip,const std::string& port)
 {
   WSAData wsData;
-  WORD DllVersion = MAKEWORD(2,1);
+  WORD DllVersion = MAKEWORD(2,2);
   if(WSAStartup(DllVersion,&wsData) != 0 ){
     throw("ERROR_INIT");
   }
@@ -58,17 +56,7 @@ void Client::connectToServer(const std::string& ip,const std::string& port)
 
   m_status = ClientStatus::CONNECTED;
 
-  char infoClient[sizeof(ClientInfo)];
-  memcpy(infoClient,&m_infoToServer,sizeof(ClientInfo));
-
-  std::vector<char> dataClientInfo;
-  Data::fillHeader(dataClientInfo, TypePacket::INFO_CLIENT);
-  dataClientInfo.insert(dataClientInfo.end(),infoClient,infoClient+sizeof(ClientInfo));
-
-  if( !sendToServer(dataClientInfo) ){
-
-    qDebug() << "sendError";
-  }
+  sendClientInfo();
 }
 
 void Client::disconnect()
@@ -80,48 +68,20 @@ void Client::disconnect()
   m_status = ClientStatus::DISCONNECTED;
 }
 
-
 void Client::listenServer()
 {
   std::thread t( [&] () {
 
-    char typePacket;
-
-    std::vector<char> sizeBuf(LEN_SIZE_DATA_INFO);
-    size_t sizeData = 0;
 
     while(m_status == ClientStatus::CONNECTED){ // цикл пока коннект
 
-      typePacket = recv(m_connection,&typePacket,LEN_TYPE_PACKET,0);
+      try{
 
-      m_data.clear();
+        recvPacket(m_connection);
 
-      switch (static_cast<TypePacket>(typePacket)) {
-      case TypePacket::DATA: {
-
-        std::fill(sizeBuf.begin(),sizeBuf.end(),0);
-
-        if(Data::recvData(m_connection,sizeBuf,LEN_SIZE_DATA_INFO)){
-          sizeData = Data::accumulateSize(sizeBuf);
-        }else{
-          continue;
-        }
-
-        if(Data::recvData(m_connection,m_data,sizeData)){
-          //получили данные и что то можно с ними делать
-
-          std::vector<char> header;
-          header.push_back(typePacket);
-          header.insert(header.end(),sizeBuf.begin(),sizeBuf.end());
-
-          recvServerDataHandler(m_data,header);
-        }else{
-          disconnect();
-        }
-      }
-
-      default:
-        break;
+      } catch(const QString& str){
+        qDebug() << str;
+        disconnect();
       }
     }
 
@@ -130,47 +90,52 @@ void Client::listenServer()
   t.detach();
 }
 
-bool Client::sendToServer(std::vector<char> &data, TypePacket type , bool fillHeader)
+void Client::sendToServer(const Packet &packet)
 {
+  sendData(m_connection,packet);
+}
 
-  if(type != TypePacket::UNKNOWN && fillHeader){
+void Client::packetHandler(SOCKET socket, const Packet &packet)
+{
+  Q_UNUSED(socket);
 
-    uint8_t sizeHeader = Data::sizeHeader(type);
-    bool memReserve = false;
+  switch (packet.type()) {
+  case TypePacket::MESSAGE:{
 
 
-    if( sizeHeader <= data.size()){
-      for(uint8_t i = 0; i < sizeHeader; ++i){
-        if(data.at(i) == '\0'){
-          memReserve = true;
-        }else{
-          memReserve = false;
-          break;
-        }
-      }
-    }
 
-    if(!memReserve){ //не оставили память для загаловка
-      std::vector<char> header;
-      Data::fillHeader(header,type,data.size());
-      data.insert(data.cbegin(),header.begin(),header.end());
-    }else{
-      Data::fillHeader(data,type,data.size() - Data::sizeHeader(type));
-    }
+    break;
   }
 
-  return (send(m_connection,data.data(),data.size(),0) != SOCKET_ERROR);
+  case TypePacket::IMAGE:{
+
+    break;
+  }
+
+  default:
+    break;
+
+  }
 }
 
-bool Client::sendToServer(const std::vector<char> &data)
+void Client::sendClientInfo()
 {
-  return (send(m_connection,data.data(),data.size(),0) != SOCKET_ERROR);
+  Packet packet;
+  packet.setTypePacket(TypePacket::INFO_CLIENT);
+
+  std::vector<char> data(sizeof(ClientInfo));
+
+  memcpy(data.data(),&m_clientInfo,sizeof(ClientInfo));
+
+  packet.setData(std::move(data));
+
+  sendToServer(packet);
 }
 
-void Client::recvServerDataHandler(std::vector<char> &data, std::vector<char>& header )
-{
-  qDebug() << "client rec :"<< data;
-}
+
+
+
+
 
 
 

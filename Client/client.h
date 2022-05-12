@@ -5,9 +5,10 @@
 #include <ws2tcpip.h>
 #include <QObject>
 #include "../DataStruct/datastruct.h"
+#include "../DataStruct/datahandler.h"
 
 
-class Client
+class Client : public QObject , public DataHandler
 {
 public:
   Client();
@@ -17,8 +18,8 @@ public:
   void connectToServer(const std::string &ip, const std::string &port);
   void disconnect();
   void listenServer();
-  bool sendToServer(std::vector<char>& data , TypePacket type = TypePacket::UNKNOWN, bool fillHeader = false);
-  bool sendToServer(const std::vector<char>& data);
+
+  void sendToServer(const Packet& packet);
 private:
   enum class ClientStatus {
     DISCONNECTED,
@@ -27,11 +28,12 @@ private:
   m_status;
 
   SOCKET m_connection;
+private:
+  ClientInfo m_clientInfo;
+  void packetHandler(SOCKET socket,const Packet& packet) override;
+private:
+  void sendClientInfo();
 
-  std::vector<char> m_data;
-  ClientInfo m_infoToServer;
-protected:
-  virtual void recvServerDataHandler(std::vector<char> &data , std::vector<char>& header);
 };
 
 #endif // CLIENT_H

@@ -10,8 +10,9 @@
 #include <queue>
 #include <mutex>
 #include "../DataStruct/datastruct.h"
+#include "../DataStruct/datahandler.h"
 
-class Server : public QObject {
+class Server : public QObject , public DataHandler{
   Q_OBJECT
 public:
   Server() = default;
@@ -48,13 +49,8 @@ private:
   std::unordered_map<SOCKET,std::queue<Packet>> m_queueSendData;
   std::vector<std::pair<SOCKET,ClientInfo*>> m_connectedClients;
 private:
-  void recvPacket(SOCKET socket);
-  bool recvData(SOCKET socket ,std::vector<char>& dataOutput , size_t size);
-
-  void packetHandler(SOCKET socket,const Packet& packet);
+  void packetHandler(SOCKET socket,const Packet& packet) override;
   void addClientInfo(SOCKET socket,const Packet& packet);
-
-  void startSendData(SOCKET socket,const Packet& packet);
   void newClientConnectHandler(SOCKET newConnection);
 signals:
   void clientConnected(const QString& name);

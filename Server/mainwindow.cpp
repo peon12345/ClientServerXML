@@ -6,6 +6,7 @@
 #include "xmldata.h"
 #include <QPixmap>
 #include <QMessageBox>
+#include <QAbstractItemView>
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
@@ -21,6 +22,7 @@ MainWindow::MainWindow(QWidget *parent)
 
   m_modelNewConnections = new QStringListModel(this);
   ui->listViewConnectedClients->setModel(m_modelNewConnections);
+  ui->listViewConnectedClients->setEditTriggers(QAbstractItemView::NoEditTriggers);
 
 
 
@@ -65,6 +67,7 @@ void MainWindow::on_pushButtonDisconnectClient_clicked()
   QModelIndex index = ui->listViewConnectedClients->currentIndex();
   QString itemText = index.data(Qt::DisplayRole).toString();
   m_server.disconnectClientByName(itemText);
+  m_modelNewConnections->removeRow(index.row());
 }
 
 
@@ -110,7 +113,7 @@ void MainWindow::xmlHandler(const QDomDocument &xmlDoc)
 
     xmlParser = std::make_unique<XmlParserFormat1>();
 
-    static const std::vector<QString> sendNameAttributes{"from","text","color","image"};
+    static const std::vector<QString> sendNameAttributes{"from","color","text","image"};
     attributesToSend = sendNameAttributes;
 
     break;
@@ -135,11 +138,15 @@ void MainWindow::xmlHandler(const QDomDocument &xmlDoc)
   }
 
   fillForm(xmlData);
-  sendDataToServer(xmlData.values(attributesToSend));
+  sendXmlData(xmlData.values(attributesToSend),xmlData.values("to"));
+
 }
 
 void MainWindow::fillForm(const XmlData &xmlData)
 {
+
+  ui->textEdit->clear();
+
   std::list<QByteArray> image = xmlData.values("image");
 
   if(!image.empty()){
@@ -154,9 +161,68 @@ void MainWindow::fillForm(const XmlData &xmlData)
   ui->textEdit->append("<span style=\" font-size:8pt; font-weight:600; color:#"+xmlData.values("color").front()+";\" >" + xmlData.values("text").front() + "</span>");
 }
 
-void MainWindow::sendDataToServer(const std::list<std::pair<QString, QByteArray> > &data)
+void MainWindow::sendXmlData(const std::list<std::pair<QString, QByteArray> > &data,std::list<QByteArray> namesToSend)
 {
 
+  QString message;
+
+  std::vector<QString> receivers;
+  receivers.reserve(namesToSend.size());
+
+  for(const QString name : namesToSend ){
+
+    receivers.push_back(name);
+  }
+
+
+  for(const auto&[attributeName, attributeValue] : data ){
+
+    Packet packet;
+
+    if(attributeName == "image"){
+
+      std::vector<char> formatImg = {'b','m','p'};
+
+      packet.setTypePacket(TypePacket::IMAGE);
+      packet.setTypeDataAccess(TypeDataAccess::PRIVATE_DATA);
+      packet.setData(attributeValue);
+      packet.setMetaData(formatImg);
+      packet.setReceivers(receivers);
+
+      if(packet.isValid()){
+
+        m_server.sendData(0,packet);
+
+      }
+
+    }else if(attributeName == "from"){
+      message += attributeName + ':' + " ";
+      message += attributeValue;
+      message += '\n';
+
+    }else if(attributeName == "color"){
+
+      message += "<span style=\" font-size:8pt; font-weight:600; color:#"+attributeValue+";\" >";
+    }
+    else if(attributeName == "text"){
+
+      message += attributeValue;
+      message += "</span>";
+    }
+  }
+
+  if(!message.isEmpty()){
+
+    Packet packet;
+    packet.setTypePacket(TypePacket::MESSAGE);
+    packet.setTypeDataAccess(TypeDataAccess::PRIVATE_DATA);
+    packet.setData(message.toUtf8());
+    packet.setReceivers(receivers);
+
+    if(packet.isValid()){
+        m_server.sendData(0,packet);
+    }
+  }
 }
 
 void MainWindow::setEnableButtons(bool isEnable)
@@ -168,7 +234,9 @@ void MainWindow::setEnableButtons(bool isEnable)
 
 void MainWindow::on_pushButtonStop_clicked()
 {
+  m_server.close();
 
+  setEnableButtons(false);
 }
 
 

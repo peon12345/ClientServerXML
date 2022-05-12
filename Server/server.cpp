@@ -1,5 +1,6 @@
 #include "server.h"
 #include "../DataStruct/datastruct.cpp"
+#include "../DataStruct/datahandler.cpp"
 
 Server::~Server()
 {
@@ -172,7 +173,6 @@ void Server::startListen(bool listenNewConnect,bool listenClientSocket)
 
             try{
               recvPacket(m_connectedClients.at(i).first);
-
             }catch(const QString& str){
 
               disconnectClientSocket(m_connectedClients.at(i).first);
@@ -188,7 +188,29 @@ void Server::startListen(bool listenNewConnect,bool listenClientSocket)
 
             if(itCommonData != m_queueSendData.end()){
 
-              startSendData(m_connectedClients.at(i).first,itCommonData->second.front());
+              //если данные приватны, проверяем, находится ли клиент в числе получателей
+              if(itCommonData->second.front().typeAccess() == TypeDataAccess::PRIVATE_DATA){
+
+                auto it = std::find_if(itCommonData->second.front().getReceivers().begin(),itCommonData->second.front().getReceivers().end(),
+                                       [&connectedClients = m_connectedClients,i](const QString& name){
+
+                                         return name == QString::fromLocal8Bit(connectedClients.at(i).second->getName().c_str());
+
+                });
+
+                if(it != itCommonData->second.front().getReceivers().end()){
+                  sendData(m_connectedClients.at(i).first,itCommonData->second.front());
+                }
+
+              }else{
+                sendData(m_connectedClients.at(i).first,itCommonData->second.front());
+
+              }
+
+
+
+
+
             }
 
             auto it = m_queueSendData.find(m_connectedClients.at(i).first);
@@ -196,7 +218,7 @@ void Server::startListen(bool listenNewConnect,bool listenClientSocket)
 
               while(!it->second.empty()){
 
-                startSendData(m_connectedClients.at(i).first,it->second.front());
+                sendData(m_connectedClients.at(i).first,it->second.front());
                 it->second.pop();
               }
               if(it->first != 0){
@@ -250,126 +272,6 @@ void Server::stopListenClientSocket()
 }
 
 
-void Server::recvPacket(SOCKET socket)
-{
-  Packet packet;
-
-  char type;
-  int resultRecv = recv(socket,&type,PacketHeader::LEN_TYPE_PACKET,0);
-
-  if(resultRecv < 0){
-
-    throw "TYPE_READ_ERROR";
-  }else{
-
-    packet.setTypePacket(static_cast<TypePacket>(type));
-
-    char typeAccess = static_cast<char>(TypeDataAccess::PUBLIC_DATA);
-
-    if(TypePacket::INFO_CLIENT != packet.type()){
-
-      resultRecv = recv(socket,&typeAccess,PacketHeader::LEN_TYPE_DATA_ACCESS,0);
-
-      if(resultRecv < 0){
-         throw "TYPE_ACCESS_READ_ERROR";
-      }else{
-        packet.setTypeDataAcces(static_cast<TypeDataAccess>(typeAccess));
-      }
-    }
-
-    if(packet.typeAccess() != TypeDataAccess::PUBLIC_DATA){
-      char sizeReceivers = 0;
-
-      resultRecv = recv(socket,&sizeReceivers,PacketHeader::LEN_COUNT_NAME,0);
-
-      if(resultRecv < 0){
-         throw "SIZE_RECEIVERS_READ_ERROR";
-      }else{
-
-        std::vector<char> name(ClientInfo::MAX_LENGHT_NAME);
-        for(int i = 0; i < static_cast<uint8_t>(sizeReceivers); ++i){
-          name.clear();
-          if(recvData(socket,name,ClientInfo::MAX_LENGHT_NAME)){
-
-            packet.appendReceiver(QString::fromUtf8(name.data()));
-
-          }else{
-             throw "ERROR_READ_RECEIVERS_NAME";
-          }
-        }
-      }
-    }
-
-
-
-    switch (packet.type()) {
-
-
-    case TypePacket::IMAGE:
-    case TypePacket::MESSAGE:{
-
-      if(TypePacket::IMAGE == packet.type()){
-        std::vector<char> formatImg(Packet::LEN_FORMAT_IMAGE);
-        if(recvData(socket,formatImg,Packet::LEN_FORMAT_IMAGE)){
-
-          packet.setMetaData(formatImg);
-        }else{
-
-          throw "READ_FORMAT_IMAGE_ERROR";
-        }
-      }
-
-      std::vector<char> sizeData(Packet::LEN_SIZE_DATA_INFO);
-
-      if(recvData(socket,sizeData,Packet::LEN_SIZE_DATA_INFO)){
-        packet.setSize(sizeData);
-      }else{
-
-        throw "SIZE_DATA_READ_ERROR";
-      }
-
-      size_t size =0;
-
-      std::for_each(sizeData.begin(),sizeData.end(), [&size] (char s) {
-        size+= (uint8_t)s;
-      });
-
-      std::vector<char> data(size);
-
-      if(recvData(socket,data,size)){
-
-        packet.setData(std::move(data));
-      }else{
-
-        throw "ERROR_DATA_READ";
-      }
-
-    }
-
-    case TypePacket::INFO_CLIENT:{
-
-
-      std::vector<char> clientInfoData(sizeof(ClientInfo));
-
-      if(recvData(socket,clientInfoData,sizeof(ClientInfo))){
-
-        packet.setData(std::move(clientInfoData));
-      }
-    }
-    default:{
-
-      throw "UNSUPPORTED PACKAGE";
-
-      break;
-    }
-
-    }
-
-    packetHandler(socket,packet);
-
-    emit packageReceived(packet);
-  }
-}
 
 
 
@@ -403,46 +305,11 @@ void Server::addClientInfo(SOCKET socket, const Packet &packet)
   }
 }
 
-void Server::startSendData(SOCKET socket, const Packet &packet)
-{
-  size_t sendResult = 0;
-  size_t sizeData = 0;
-
-  std::vector<char> data = packet.convertToVector();
-
-  do{
-    sizeData =  data.size();
-    sendResult = send(socket,data.data(),sizeData,0);
-    }while(sendResult < sizeData || static_cast<int>(sendResult) != SOCKET_ERROR);
-}
 
 
 
-bool Server::recvData(SOCKET socket, std::vector<char> &dataOutput, size_t size)
-{
-    if(dataOutput.size() < size){
-        dataOutput.resize(size);
-      }
 
-    int total = 0;
-    int resultRecv = 0;
-    int sizeLeft = size;
 
-    while(total < sizeLeft) {
-        resultRecv = recv(socket,dataOutput.data(),sizeLeft,0);
-
-        if (resultRecv == 0) {
-            break;
-          }else if(resultRecv < 0){
-
-            return false;
-          }
-
-        total += resultRecv;
-        sizeLeft -= resultRecv;
-      }
-    return true;
-}
 
 void Server::packetHandler(SOCKET socket, const Packet &packet)
 {
@@ -461,11 +328,15 @@ void Server::packetHandler(SOCKET socket, const Packet &packet)
     break;
 
   }
+
+
+  emit packageReceived(packet);
 }
 
 
 void Server::sendData(SOCKET socket, const Packet &packet)
 {
+
   auto it = m_queueSendData.find(socket);
 
   if(it != m_queueSendData.end()) {
@@ -474,6 +345,8 @@ void Server::sendData(SOCKET socket, const Packet &packet)
     auto it = m_queueSendData.insert(std::make_pair(socket,std::queue<Packet>{}));
     it.first->second.emplace(packet);
     }
+
+
 }
 
 void Server::disconnectClientByName(const QString &name)

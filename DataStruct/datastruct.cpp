@@ -19,7 +19,28 @@ void PacketHeader::setHeaderData(const std::vector<char> &headerData)
    it = headerData.begin();
 
    m_typePacket = static_cast<TypePacket>(*it++);
+
+
+   size_t size = sizePacketBuffLen(m_typePacket);
+
+
+   for(size_t i = 0;i<size;++i){
+     m_sizeData.at(i) = *it++;
+   }
+
    m_typeDataAcces = static_cast<TypeDataAccess>(*it++);
+
+   switch (type()) {
+   case TypePacket::INFO_CLIENT:{
+
+     return void();
+   }
+
+
+   default:{
+     break;
+   }
+   }
 
    switch (m_typeDataAcces) {
 
@@ -60,10 +81,8 @@ void PacketHeader::setHeaderData(const std::vector<char> &headerData)
      }
   }
 
-   m_sizeData.fill(0);
-   for(int i = 0; i < LEN_SIZE_DATA_INFO; ++i){
-     m_sizeData.at(i) = *it++;
-     }
+   setSize(headerData.size() - sizeHeader(type()));
+
    }
 }
 
@@ -112,15 +131,22 @@ bool PacketHeader::isValid() const
   return true;
 }
 
+const std::vector<QString> &PacketHeader::getReceivers() const
+{
+  return m_receivers;
+}
+
 std::vector<char> PacketHeader::convertToVector() const
 {
   std::vector<char> result;
 
   if(!isValid()){
       return result;
-    }
+   }
 
   result.reserve(sizeHeader(m_typePacket));
+
+  result.insert(result.end(),m_sizeData.begin(),m_sizeData.end());
   result.push_back(static_cast<char>(m_typePacket));
   result.push_back(static_cast<char>(m_typeDataAcces));
 
@@ -170,17 +196,16 @@ uint8_t PacketHeader::sizeHeader(TypePacket type, TypeDataAccess typeAccess, int
       }
 
     case TypePacket::MESSAGE: {
-        sizeHeader+= LEN_TYPE_PACKET + LEN_SIZE_DATA_INFO;
+        sizeHeader+= LEN_TYPE_PACKET + LEN_SIZE_MESSAGE;
         break;
       }
     case TypePacket::IMAGE: {
-        sizeHeader += LEN_TYPE_PACKET + LEN_FORMAT_IMAGE + LEN_SIZE_DATA_INFO;
+        sizeHeader += LEN_TYPE_PACKET + LEN_FORMAT_IMAGE + LEN_SIZE_IMAGE;
         break;
       }
 
     default:{
 
-        sizeHeader+= LEN_TYPE_PACKET + LEN_SIZE_DATA_INFO;
         break;
       }
     }
@@ -196,7 +221,37 @@ uint8_t PacketHeader::sizeHeader(TypePacket type, TypeDataAccess typeAccess, int
       break;
     }
 
-  return sizeHeader;
+    return sizeHeader;
+}
+
+size_t PacketHeader::sizePacketBuffLen(TypePacket type)
+{
+
+  std::vector<char> sizeBuf;
+
+  switch (type) {
+
+  case TypePacket::MESSAGE:{
+
+   return LEN_SIZE_MESSAGE;
+  }
+
+  case TypePacket::IMAGE:{
+
+   return LEN_SIZE_IMAGE;
+  }
+
+  case TypePacket::INFO_CLIENT:{
+
+    return sizeof(ClientInfo) ;
+    break;
+  }
+
+  default:
+    return 0;
+    break;
+  }
+
 }
 
 TypePacket PacketHeader::type() const
@@ -214,14 +269,9 @@ void PacketHeader::setTypePacket(TypePacket typePacket)
   m_typePacket = typePacket;
 }
 
-void PacketHeader::setTypeDataAcces(TypeDataAccess typeAcces)
+void PacketHeader::setTypeDataAccess(TypeDataAccess typeAccess)
 {
-  m_typeDataAcces = typeAcces;
-}
-
-void PacketHeader::setSize(const std::array<uint8_t, 4> &size)
-{
-  m_sizeData = size;
+  m_typeDataAcces = typeAccess;
 }
 
 void PacketHeader::setSize(const std::vector<char>& size)
@@ -233,9 +283,17 @@ void PacketHeader::setSize(const std::vector<char>& size)
 
 void PacketHeader::setSize(int size)
 {
+
+  if(m_typePacket == TypePacket::UNKNOWN){
+
+    return void();
+  }
+
+  size_t sizeLen = sizePacketBuffLen(m_typePacket);
+
   if(size >0){
 
-      for(int i = 0;i< LEN_SIZE_DATA_INFO;++i){
+      for(size_t i = 0;i< sizeLen;++i){
 
           if(size > 255){
               m_sizeData.at(i) = -1;
@@ -254,7 +312,6 @@ void PacketHeader::setMetaData(const std::vector<char> &metaData)
 {
   m_sizeMetaData = metaData.size();
   m_metaData = metaData;
-
 }
 
 void PacketHeader::setReceivers(const std::vector<QString> &receivers)
@@ -286,7 +343,7 @@ void Packet::setDataWithHeader(const std::vector<char> &dataWithHeader)
    setData(std::move(data));
 }
 
-std::vector<char> Packet::convertToVector() const
+std::vector<char> Packet:: convertToVector() const
 {
   std::vector<char> result =  PacketHeader::convertToVector();
 
@@ -300,14 +357,23 @@ std::vector<char> Packet::convertToVector() const
 void Packet::setData(const std::vector<char> &data)
 {
   m_data = data;
+  setSize(m_data.size());
+}
+
+void Packet::setData(const QByteArray &array)
+{
+  m_data.clear();
+  m_data.insert(m_data.end(),array.begin(),array.end());
 }
 
 void Packet::setData(std::vector<char> &&data)
 {
   m_data = std::move(data);
+  setSize(m_data.size());
 }
 
 const std::vector<char> Packet::getData() const
 {
   return m_data;
 }
+

@@ -32,7 +32,7 @@ private slots:
 private:
   void xmlHandler(const QDomDocument& xmlDoc);
   void fillForm(const XmlData& xmlData);
-  void sendDataToServer(const std::list<std::pair<QString,QByteArray>>& data);
+  void sendXmlData(const std::list<std::pair<QString,QByteArray>>& data, std::list<QByteArray> namesToSend);
 private:
   void setEnableButtons(bool isEnable);
   Server m_server;
