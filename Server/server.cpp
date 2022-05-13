@@ -58,8 +58,8 @@ void Server::initServer(const std::string &ip, ushort port, const uint maxConnec
 void Server::close()
 {
   m_flagListenClientData = false;
-  m_flagListenClientData = false;
-  closesocket(m_listenSocket);
+  m_flagListenConnects = false;
+  //closesocket(m_listenSocket);
   disconnectAll();
   WSACleanup();
 }
@@ -82,12 +82,17 @@ void Server::startListen(bool listenNewConnect,bool listenClientSocket)
 
     while(m_flagListenConnects || m_flagListenClientData){
 
+
+      for(SOCKET socket : m_waitingDisconnectSocket){
+        disconnectClientSocket(socket);
+      }
+      m_waitingDisconnectSocket.clear();
+
+
       std::unique_lock ulk(m_mutexStartListen);
       if(m_needWaitData){
-        qDebug() << m_continueListen;
-      m_cvListen.wait(ulk,[&b = m_continueListen]{return b == true;});
-        qDebug() << "waitOK";
-      m_needWaitData = false;
+        m_cvListen.wait(ulk,[&b = m_continueListen]{return b == true;});
+        m_needWaitData = false;
       }
 
       FD_ZERO(&fdSetReady);
@@ -101,16 +106,16 @@ void Server::startListen(bool listenNewConnect,bool listenClientSocket)
 
       bool checkSendAllSocket = false;
 
-      if(!m_queueSendData.empty()){
+      if(!m_sendData.empty()){
 
-        auto it = m_queueSendData.find(0);
+        auto it = m_sendData.find(0);
 
-        if(it != m_queueSendData.end()){ // где нужно отправить всем
+        if(it != m_sendData.end()){ // где нужно отправить всем
           checkSendAllSocket = true;
 
         }else{ //отправка конкретным клиентам
 
-          for(std::pair<SOCKET,const std::queue<Packet>&> pair : m_queueSendData){
+          for(std::pair<SOCKET,const std::list<Packet>&> pair : m_sendData){
             FD_SET(pair.first,&fdSetWrite);
           }
         }
@@ -121,17 +126,13 @@ void Server::startListen(bool listenNewConnect,bool listenClientSocket)
         FD_SET(socket,&fdSetError);
 
         if(checkSendAllSocket){
-         FD_SET(socket,&fdSetWrite);
+          FD_SET(socket,&fdSetWrite);
         }
       }
 
       int totalSocket = select(0,&fdSetReady,&fdSetWrite,&fdSetError,&tv);
 
-      for(SOCKET socket : waitingDisconnectSocket){
-        disconnectClientSocket(socket);
-      }
-
-      if((totalSocket == 0 || totalSocket == SOCKET_ERROR) || (fdSetReady.fd_count == 0 && m_queueSendData.empty())){
+      if((totalSocket == 0 || totalSocket == SOCKET_ERROR) || (fdSetReady.fd_count == 0 && m_sendData.empty())){
         continue;
       }
 
@@ -172,10 +173,8 @@ void Server::startListen(bool listenNewConnect,bool listenClientSocket)
         for(size_t i = 0; i < m_connectedClients.size();++i ){
 
           if(FD_ISSET(m_connectedClients.at(i).first,&fdSetError )){ // если ошибка
-            //установим мьютекс
-            //нужно очистить данные из очереди
-            //в это время могли придти новые данные
-            disconnectClientSocket(m_connectedClients.at(i).first);
+
+            scheduleShutdownSocket(m_connectedClients.at(i).first);
             continue;
           }
 
@@ -186,20 +185,19 @@ void Server::startListen(bool listenNewConnect,bool listenClientSocket)
               recvPacket(m_connectedClients.at(i).first);
             }catch(const char* str){
 
-              disconnectClientSocket(m_connectedClients.at(i).first);
+              scheduleShutdownSocket(m_connectedClients.at(i).first);
+              continue;
             }
           }
 
-             //здесь установим мьютекс
-             //в методе sendData можем добавить
 
           if(FD_ISSET(m_connectedClients.at(i).first,&fdSetWrite)){ //если готова принять данные, проверяем на их наличие
 
-            auto itCommonData = m_queueSendData.find(0);
+            auto itCommonData = m_sendData.find(0);
 
-            if(itCommonData != m_queueSendData.end()){
+            if(itCommonData != m_sendData.end()){
 
-              //если данные приватны, проверяем, находится ли клиент в числе получателей
+                 //если данные приватны, проверяем, находится ли клиент в числе получателей
               if(itCommonData->second.front().typeAccess() == TypeDataAccess::PRIVATE_DATA){
 
                 auto it = std::find_if(itCommonData->second.front().getReceivers().begin(),itCommonData->second.front().getReceivers().end(),
@@ -208,31 +206,38 @@ void Server::startListen(bool listenNewConnect,bool listenClientSocket)
                                          qDebug() << QString::fromStdString(connectedClients.at(i).second->getName());
                                          return name == QString::fromStdString(connectedClients.at(i).second->getName());
 
-                });
+                                       });
 
                 if(it != itCommonData->second.front().getReceivers().end()){
 
-                  sendData(m_connectedClients.at(i).first,itCommonData->second.front());
+                  for(const Packet& packet: itCommonData->second){
+                    sendData(m_connectedClients.at(i).first,packet);
+                  }
+
 
                 }
 
               }else{
-                sendData(m_connectedClients.at(i).first,itCommonData->second.front());
+
+                for(const Packet& packet: itCommonData->second){
+                  sendData(m_connectedClients.at(i).first,packet);
+                }
 
               }
 
             }
 
-            auto it = m_queueSendData.find(m_connectedClients.at(i).first);
-            if(it != m_queueSendData.end()){
+            auto it = m_sendData.find(m_connectedClients.at(i).first);
+            if(it != m_sendData.end()){
 
-              while(!it->second.empty()){
+              for(const Packet& packet : it->second){
 
-                sendData(m_connectedClients.at(i).first,it->second.front());
-                it->second.pop();
+                sendData(m_connectedClients.at(i).first,packet);
               }
+
+
               if(it->first != 0){
-                m_queueSendData.erase(it);
+                m_sendData.erase(it);
               }
             }
           }
@@ -241,8 +246,8 @@ void Server::startListen(bool listenNewConnect,bool listenClientSocket)
              //но ему нужно их отправить, оставляем данные на потом, пока не получим ошибку клиентского сокета
              //узнаем кому не получилось отправить данные
 
-          auto it = m_queueSendData.find(0);
-          if(it != m_queueSendData.end()){
+          auto it = m_sendData.find(0);
+          if(it != m_sendData.end()){
 
             for(size_t i = 0; i < m_connectedClients.size(); ++i){
 
@@ -257,8 +262,8 @@ void Server::startListen(bool listenNewConnect,bool listenClientSocket)
             }
           }
 
-          m_queueSendData.erase(0); // удаляем общие данные
-          //в m_queueSendData могут остаться данные, которые были предназначены конкретным клиентам
+          m_sendData.erase(0); // удаляем общие данные
+          //в m_sendData могут остаться данные, которые были предназначены конкретным клиентам
           //но пока не были отправлены
         }
       }
@@ -300,12 +305,12 @@ void Server::addClientInfo(SOCKET socket, const Packet &packet)
     if(it->second){
       delete it->second;
     }else{
-     m_counterUnknownClients--;
-     }
+      m_counterUnknownClients--;
+    }
 
     it->second = clientInfo;
 
-     emit clientChangedName(oldName,QString::fromLocal8Bit(clientInfo->getName().c_str()).toUtf8());
+    emit clientChangedName(oldName,QString::fromLocal8Bit(clientInfo->getName().c_str()).toUtf8());
 
   }else{
     delete clientInfo;
@@ -322,15 +327,28 @@ void Server::packetHandler(SOCKET socket, const Packet &packet)
     addClientInfo(socket,packet);
     break;
   }
+  case TypePacket::COMMAND:{
 
-  //...another Packet
+    if(!packet.getMetaData().empty()){
+      int8_t command = packet.getMetaData().back();
 
-    default:
+      switch (static_cast<Command>(command)) {
+
+      case Command::SEND_AGAIN_XML_DATA:{
+        emit requestXmlData();
+      }
+
+      }
+    }
+  }
+
+       //...another Packet
+
+  default:
 
     break;
 
   }
-
 
   emit packageReceived(packet);
 }
@@ -338,19 +356,17 @@ void Server::packetHandler(SOCKET socket, const Packet &packet)
 
 void Server::sendPacket(SOCKET socket, const Packet &packet)
 {
-  qDebug() << "sendPacket" << static_cast<char>(packet.type());
-
   m_needWaitData = true;
   m_continueListen = false;
 
-  auto it = m_queueSendData.find(socket);
+  auto it = m_sendData.find(socket);
 
-  if(it != m_queueSendData.end()) {
-    it->second.emplace(packet);
+  if(it != m_sendData.end()) {
+    it->second.push_back(packet);
   }else{
-    auto it = m_queueSendData.insert(std::make_pair(socket,std::queue<Packet>{}));
-    it.first->second.emplace(packet);
-    }
+    auto it = m_sendData.insert(std::make_pair(socket,std::list<Packet>{}));
+    it.first->second.push_back(packet);
+  }
 
   m_continueListen = true;
   m_cvListen.notify_one();
@@ -363,20 +379,18 @@ void Server::disconnectClientByName(const QString &name)
   auto it = std::find_if(m_connectedClients.begin(),m_connectedClients.end(),
                          [&nameStd](const std::pair<SOCKET,ClientInfo*>& pair) {
 
-    return (nameStd == pair.second->getName());
+                           return (nameStd == pair.second->getName());
 
-    });
+                         });
+
   if(it != m_connectedClients.end()){
-  waitingDisconnectSocket.push_back(it->first);
+    m_waitingDisconnectSocket.push_back(it->first);
   }
 }
 
 
 void Server::disconnectClientSocket(SOCKET socket)
 {
-//  надо здесь мьютекс , в листен будет ошибка
-//  здесь дожидаемся конца цикла в другом потоке
-
   if(shutdown(socket,SD_BOTH ) != SOCKET_ERROR){
 
     closesocket(socket);
@@ -387,10 +401,12 @@ void Server::disconnectClientSocket(SOCKET socket)
                          [socket](const std::pair<SOCKET,ClientInfo*>& pair) {return pair.first == socket;} );
 
   if(it != m_connectedClients.end()){
-
+    QString name = QString::fromLocal8Bit(it->second->getName().c_str());
     delete it->second;
     m_connectedClients.erase(it);
-    m_queueSendData.erase(socket);
+    m_sendData.erase(socket);
+
+    emit clientDisconnected(name);
   }
 
 }
@@ -401,39 +417,37 @@ void Server::newClientConnectHandler(SOCKET newConnection)
   static const std::vector<char> message(connectedStr.begin(),connectedStr.end());
 
 
-  //клиент еще не назвал свое имя, назовем его
+     //клиент еще не назвал свое имя, назовем его
 
   auto it = std::find_if(m_connectedClients.begin(),m_connectedClients.end(),[newConnection] (const std::pair<SOCKET,ClientInfo*>& pair) {
 
     return newConnection == pair.first;
 
-    } );
+  } );
 
 
   if(it != m_connectedClients.end()){
-      QString name = "Anonim";
-      if(m_counterUnknownClients > 0){
-       name += "(" + QString::number(m_counterUnknownClients) + ")";
-      }
+    QString name = "Anonim";
+    if(m_counterUnknownClients > 0){
+      name += "(" + QString::number(m_counterUnknownClients) + ")";
+    }
 
-     ClientInfo* clientInfo = new ClientInfo(name.toStdString());
-     it->second = clientInfo;
-
-
-     static Packet packet;
-
-     if(!packet.isValid()){
-       packet.setTypePacket(TypePacket::MESSAGE);
-       packet.setTypeDataAccess(TypeDataAccess::PRIVATE_DATA);
-       packet.appendReceiver(QString::fromLocal8Bit(it->second->getName().c_str()));
-       packet.setData(message);
-     }
-
-     sendPacket(newConnection,packet);
+    ClientInfo* clientInfo = new ClientInfo(name.toStdString());
+    it->second = clientInfo;
 
 
-     m_counterUnknownClients++;
-     emit clientConnected(name);
+    static Packet packet;
+
+    if(!packet.isValid()){
+      packet.setTypePacket(TypePacket::MESSAGE);
+      packet.setTypeDataAccess(TypeDataAccess::PRIVATE_DATA);
+      packet.appendReceiver(QString::fromLocal8Bit(it->second->getName().c_str()));
+      packet.setData(message);
+    }
+
+    sendPacket(newConnection,packet);
+    m_counterUnknownClients++;
+    emit clientConnected(name);
   }
 }
 
@@ -441,8 +455,14 @@ void Server::disconnectAll()
 {
   for( const auto &[socket , info] : m_connectedClients ){
     delete info;
-    disconnectClientSocket(socket);
+    scheduleShutdownSocket(socket);
+    //disconnectClientSocket(socket);
   }
+}
+
+void Server::scheduleShutdownSocket(SOCKET socket)
+{
+  m_waitingDisconnectSocket.push_back(socket);
 }
 
 

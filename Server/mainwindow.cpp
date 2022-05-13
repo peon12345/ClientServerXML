@@ -24,8 +24,19 @@ MainWindow::MainWindow(QWidget *parent)
   ui->listViewConnectedClients->setModel(m_modelNewConnections);
   ui->listViewConnectedClients->setEditTriggers(QAbstractItemView::NoEditTriggers);
 
-  connect(&m_server,&Server::clientConnected,this,&MainWindow::addNewClient);
+
   connect(&m_server,&Server::clientChangedName,this,&MainWindow::updateNameClient);
+  connect(&m_server,&Server::clientConnected,this,&MainWindow::addNewClient);
+  connect(&m_server,&Server::clientDisconnected,this,&MainWindow::eraseClient);
+  connect(&m_server,&Server::requestXmlData,this, [&]() {sendXmlData(m_xmlData.values(m_attributesToSendServer),m_xmlData.values("to"));  } );
+
+
+
+
+
+
+
+
 }
 
 MainWindow::~MainWindow()
@@ -104,7 +115,7 @@ void MainWindow::xmlHandler(const QDomDocument &xmlDoc)
   XmlParser::XmlFormatSupport format = XmlParser::XmlFormatSupport::MESSAGE_WITH_IMAGE;
 
   std::unique_ptr<XmlParser> xmlParser;
-  std::vector<QString> attributesToSend;
+
 
   switch (format) {
 
@@ -113,11 +124,10 @@ void MainWindow::xmlHandler(const QDomDocument &xmlDoc)
     xmlParser = std::make_unique<XmlParserFormat1>();
 
     static const std::vector<QString> sendNameAttributes{"from","color","text","image"};
-    attributesToSend = sendNameAttributes;
+    m_attributesToSendServer = sendNameAttributes;
 
     break;
   }
-
 
        //...
        //другие XML форматы
@@ -128,16 +138,15 @@ void MainWindow::xmlHandler(const QDomDocument &xmlDoc)
     return void();
   }
 
-  XmlData xmlData;
 
   try{
-    xmlData = xmlParser->parse(xmlDoc);
+    m_xmlData = xmlParser->parse(xmlDoc);
   }catch(...){
     return void();
   }
 
-  fillForm(xmlData);
-  sendXmlData(xmlData.values(attributesToSend),xmlData.values("to"));
+  fillForm(m_xmlData);
+  sendXmlData(m_xmlData.values(m_attributesToSendServer),m_xmlData.values("to"));
 
 }
 
@@ -162,8 +171,7 @@ void MainWindow::fillForm(const XmlData &xmlData)
 
 void MainWindow::sendXmlData(const std::list<std::pair<QString, QByteArray> > &data,std::list<QByteArray> namesToSend)
 {
-
-  QString message;
+  QString text;
 
   std::vector<QString> receivers;
   receivers.reserve(namesToSend.size());
@@ -172,7 +180,6 @@ void MainWindow::sendXmlData(const std::list<std::pair<QString, QByteArray> > &d
 
     receivers.push_back(name);
   }
-
 
   for(const auto&[attributeName, attributeValue] : data ){
 
@@ -189,33 +196,31 @@ void MainWindow::sendXmlData(const std::list<std::pair<QString, QByteArray> > &d
       packet.setReceivers(receivers);
 
       if(packet.isValid()){
-
         m_server.sendPacket(0,packet);
-
       }
 
     }else if(attributeName == "from"){
-      message += attributeName + ':' + " ";
-      message += attributeValue;
-      message += '\n';
+      text +=attributeName + ':' + " ";
+      text += attributeValue;
+      text += "\n";
 
     }else if(attributeName == "color"){
 
-      message += "<span style=\" font-size:8pt; font-weight:600; color:#"+attributeValue+";\" >";
+      text += "<span style=\" font-size:8pt; font-weight:600; color:#"+attributeValue+";\" >";
     }
     else if(attributeName == "text"){
 
-      message += attributeValue;
-      message += "</span>";
+      text += attributeValue;
+      text += "</span>";
     }
   }
 
-  if(!message.isEmpty()){
+  if(!text.isEmpty()){
 
     Packet packet;
     packet.setTypePacket(TypePacket::MESSAGE);
     packet.setTypeDataAccess(TypeDataAccess::PRIVATE_DATA);
-    packet.setData(message.toUtf8());
+    packet.setData(text.toUtf8());
     packet.setReceivers(receivers);
 
     if(packet.isValid()){
@@ -255,9 +260,43 @@ void MainWindow::updateNameClient(const QString &oldName, const QString &newName
     if(oldName == index.data(Qt::DisplayRole).toString()){
 
       m_modelNewConnections->setData(index,newName.toLocal8Bit());
-    }    
+      break;
+    }
   }
 }
+
+void MainWindow::eraseClient(const QString &name)
+{
+  for( int i = 0; i<  m_modelNewConnections->rowCount(); ++i){
+
+    QModelIndex index = m_modelNewConnections->index(i, 0);
+
+    if(name.toLocal8Bit() == index.data(Qt::DisplayRole).toString()){
+
+      m_modelNewConnections->removeRow(index.row());
+      break;
+    }
+  }
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

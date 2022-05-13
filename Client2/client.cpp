@@ -32,6 +32,8 @@ void Client::connectToServer(const std::string& ip,const std::string& port)
     qDebug() << GetLastError();
     throw("GETADDDRINFO_FAILED_WITH_ERROR");
   }
+
+  if(m_connection == INVALID_SOCKET){
   m_connection = socket(m_resultAddr->ai_family,m_resultAddr->ai_socktype,m_resultAddr->ai_protocol);
 
   if(m_connection == INVALID_SOCKET){
@@ -40,12 +42,14 @@ void Client::connectToServer(const std::string& ip,const std::string& port)
     throw("INIT_CONNECTION_SOCKET_ERROR");
   }
 
+
   if(WSAAPI::connect(m_connection,m_resultAddr->ai_addr,static_cast<int>(m_resultAddr->ai_addrlen)) != 0)
   {
     WSACleanup();
     closesocket(m_connection);
     m_connection = INVALID_SOCKET;
     throw("CONNECT_ERROR");
+  }
   }
 
   m_status = ClientStatus::CONNECTED;
@@ -55,16 +59,11 @@ void Client::connectToServer(const std::string& ip,const std::string& port)
 
 void Client::disconnect()
 {
-  WSACleanup();
-  if(shutdown(m_connection,SD_BOTH) != SOCKET_ERROR){
-
-    if( closesocket(m_connection) != SOCKET_ERROR) {
-
-
+    WSACleanup();
     m_connection = INVALID_SOCKET;
     m_status = ClientStatus::DISCONNECTED;
-    }
-  }
+    emit disconnected();
+
 }
 
 void Client::listenServer()
@@ -78,7 +77,6 @@ void Client::listenServer()
         recvPacket(m_connection);
 
       } catch(const char* str){
-        qDebug() << str;
         disconnect();
       }
     }
@@ -101,24 +99,8 @@ void Client::packetHandler(SOCKET socket, const Packet &packet)
 {
   Q_UNUSED(socket);
 
-   emitPackageReceived(packet);
-
-  switch (packet.type()) {
-  case TypePacket::MESSAGE:{
-
-
-    break;
-  }
-
-  case TypePacket::IMAGE:{
-    qDebug() << "image";
-    break;
-  }
-
-  default:
-    break;
-
-  }
+   //emitPackageReceived(packet);
+  emit packageReceived(packet);
 }
 
 void Client::sendClientInfo()
@@ -135,10 +117,6 @@ void Client::sendClientInfo()
   sendToServer(packet);
 }
 
-void Client::emitPackageReceived(const Packet &packet)
-{
-  emit packageReceived(packet);
-}
 
 
 

@@ -22,6 +22,11 @@ void PacketHeader::setHeaderData(const std::vector<char> &headerData)
       m_typePacket = static_cast<TypePacket>(*it++);
     }
 
+    if(TypePacket::COMMAND == m_typePacket){
+      m_metaData.push_back(*it++);
+      return void();
+    }
+
     if(m_typePacket != TypePacket::INFO_CLIENT){
 
       if(m_sizeData.empty()) {
@@ -33,63 +38,63 @@ void PacketHeader::setHeaderData(const std::vector<char> &headerData)
       }
 
 
-        if(m_typeDataAcces  == TypeDataAccess::UNKNOWN){
-          m_typeDataAcces = static_cast<TypeDataAccess>(*it++);
+      if(m_typeDataAcces  == TypeDataAccess::UNKNOWN){
+        m_typeDataAcces = static_cast<TypeDataAccess>(*it++);
 
-          if(m_typeDataAcces != TypeDataAccess::PUBLIC_DATA){
-            m_offset += 2;
+        if(m_typeDataAcces != TypeDataAccess::PUBLIC_DATA){
+          m_offset += 2;
+        }
+      }
+
+    }else{
+      m_offset +=1;
+      return void();
+    }
+
+    switch (m_typeDataAcces) {
+
+    case TypeDataAccess::PRIVATE_DATA:{
+      if(m_receivers.empty()){
+        m_countReceiver = *it++;
+
+        for(int i = 0; i < m_countReceiver; ++i){
+          std::string name;
+
+          for(size_t j = 0; j < ClientInfo::MAX_LENGHT_NAME; ++j){
+            name += *it++;
           }
-        }
-
-      }else{
-        m_offset +=1;
-        return void();
-      }
-
-      switch (m_typeDataAcces) {
-
-      case TypeDataAccess::PRIVATE_DATA:{
-        if(m_receivers.empty()){
-          m_countReceiver = *it++;
-
-          for(int i = 0; i < m_countReceiver; ++i){
-            std::string name;
-
-            for(size_t j = 0; j < ClientInfo::MAX_LENGHT_NAME; ++j){
-              name += *it++;
-            }
-            m_receivers.push_back(QString::fromLocal8Bit(name.c_str()));
-            m_offset += ClientInfo::MAX_LENGHT_NAME;
-          }
+          m_receivers.push_back(QString::fromLocal8Bit(name.c_str()));
+          m_offset += ClientInfo::MAX_LENGHT_NAME;
         }
       }
+    }
 
-      default:{
+    default:{
 
-        break;
-      }
-      }
+      break;
+    }
+    }
 
 
-      switch (m_typePacket) {
+    switch (m_typePacket) {
 
-      case TypePacket::IMAGE:{
-        if(m_metaData.empty()){
-          m_sizeMetaData = LEN_FORMAT_IMAGE;
-          m_metaData.clear();
-          m_metaData.insert(m_metaData.end(),it,it+LEN_FORMAT_IMAGE );
-          it+=LEN_FORMAT_IMAGE;
-         // m_offset += LEN_FORMAT_IMAGE;
-        }
+    case TypePacket::IMAGE:{
+      if(m_metaData.empty()){
+        m_sizeMetaData = LEN_FORMAT_IMAGE;
+        m_metaData.clear();
+        m_metaData.insert(m_metaData.end(),it,it+LEN_FORMAT_IMAGE );
+        it+=LEN_FORMAT_IMAGE;
+        // m_offset += LEN_FORMAT_IMAGE;
       }
-      default:{
-        break;
-      }
-      }
+    }
+    default:{
+      break;
+    }
+    }
 
-      if(m_sizeData.empty()){
-        setSize(headerData.size() - sizeHeader(type()));
-      }
+    if(m_sizeData.empty()){
+      setSize(headerData.size() - sizeHeader(type()));
+    }
 
 
   }
@@ -131,6 +136,15 @@ bool PacketHeader::isValid() const
 
       return true;
     }
+
+    case TypePacket::COMMAND:{
+
+      if(!m_metaData.empty()){
+        return true;
+      }
+      break;
+    }
+
     default:{
       return false;
     }
@@ -161,8 +175,13 @@ std::vector<char> PacketHeader::convertToVector() const
   }
 
   result.reserve(sizeHeader(m_typePacket));
-
   result.push_back(static_cast<char>(m_typePacket));
+
+  if(m_typePacket == TypePacket::COMMAND){
+    result.push_back(m_metaData.back());
+    return result;
+  }
+
 
   if(TypePacket::INFO_CLIENT != m_typePacket){
     result.insert(result.end(),m_sizeData.begin(),m_sizeData.end());
@@ -362,6 +381,13 @@ void PacketHeader::setMetaData(const std::vector<char> &metaData)
   m_offset -= metaData.size();
 }
 
+void PacketHeader::appendMetaData(char c)
+{
+  m_metaData.push_back(c);
+  m_sizeMetaData++;
+  m_offset--;
+}
+
 void PacketHeader::setReceivers(const std::vector<QString> &receivers)
 {
   m_receivers = receivers;
@@ -427,7 +453,7 @@ void Packet::setData(std::vector<char> &&data)
   setSize(m_data.size());
 }
 
-const std::vector<char> Packet::getData() const
+const std::vector<char>& Packet::getData() const
 {
   return m_data;
 }

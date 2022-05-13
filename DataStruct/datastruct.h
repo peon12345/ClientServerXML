@@ -22,6 +22,10 @@ enum class TypeDataAccess : int8_t {
   UNKNOWN
 };
 
+enum class Command : int8_t {
+  SEND_AGAIN_XML_DATA
+};
+
 
 class ClientInfo final {
 public:
@@ -58,11 +62,11 @@ public:
  TypePacket type() const;
  TypeDataAccess typeAccess() const;
 public:
+ static constexpr int LEN_COMMAND = 1;
  static constexpr int LEN_TYPE_PACKET = 1;
  static constexpr int LEN_TYPE_DATA_ACCESS = 1;
  static constexpr int LEN_COUNT_NAME = 1;
  static constexpr int LEN_FORMAT_IMAGE = 3;
-
  static constexpr int LEN_SIZE_MESSAGE = 100;
  static constexpr int LEN_SIZE_IMAGE = 200;
  public:
@@ -73,6 +77,7 @@ public:
  void setSize(const std::vector<char>& size,bool withHeader = false);
  void setSize(int size,bool withHeader = false);
  void setMetaData(const std::vector<char>& metaData);
+ void appendMetaData(char c);
  void setReceivers(const std::vector<QString>& receivers );
  void appendReceiver(const QString& name );
  bool isValid() const;

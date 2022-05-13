@@ -29,6 +29,7 @@ private slots:
 
   void on_pushButtonStop_clicked();
   void updateNameClient(const QString& oldName, const QString& newName);
+  void eraseClient(const QString& name);
 
 private:
   void xmlHandler(const QDomDocument& xmlDoc);
@@ -37,7 +38,9 @@ private:
 private:
   void setEnableButtons(bool isEnable);
   Server m_server;
+  XmlData m_xmlData;
   QStringListModel* m_modelNewConnections;
+  std::vector<QString> m_attributesToSendServer;
   Ui::MainWindow *ui;
 };
 #endif // MAINWINDOW_H

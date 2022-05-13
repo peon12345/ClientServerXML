@@ -51,48 +51,72 @@ void DataHandler::recvPacket(SOCKET socket)
   int resultRecv = recv(socket,&type,PacketHeader::LEN_TYPE_PACKET,0);
 
   if(resultRecv > 0){
+
+
+    if(static_cast<TypePacket>(type) == TypePacket::COMMAND){
+      char command;
+      resultRecv = recv(socket,&command,PacketHeader::LEN_COMMAND,0);
+
+      if(resultRecv > 0){
+        packet.setTypePacket(static_cast<TypePacket>(type));
+        packet.appendMetaData(command);
+
+        packetHandler(socket,packet);
+      }else{
+        throw "SOCKER_ERROR";
+      }
+
+      return void();
+    }
+
     std::vector<char> sizePacket( Packet::sizePacketBuffLen(static_cast<TypePacket>(type)));
 
     int sizePacketLen = sizePacket.size();
     try {
       recvData(socket,sizePacket,sizePacketLen);
-     }catch(const QString& str){
+    }catch(const QString& str){
       throw str;
-     }
-      size_t size = 0;
+    }
+    size_t size = 0;
 
-      std::for_each(sizePacket.begin(),sizePacket.end(), [&size](char s) {
-        size += uint8_t(s);
-      });
+    std::for_each(sizePacket.begin(),sizePacket.end(), [&size](char s) {
+      size += uint8_t(s);
+    });
 
-      if(TypePacket::INFO_CLIENT != static_cast<TypePacket>(type)){
+    if(TypePacket::INFO_CLIENT != static_cast<TypePacket>(type)){
       size -= sizePacketLen -1;
-      }else{
-        size -= 1;
+    }else{
+      size -= 1;
+    }
+
+    std::vector<char> data(size);
+    try{
+      if(data.empty()){
+        throw "ERROR READ SIZE";
       }
 
-      std::vector<char> data(size);
-      try{
-        if(data.empty()){
-          throw "ERROR READ SIZE";
-        }
+      recvData(socket,data,size);
+    }catch(const QString& str){
 
-        recvData(socket,data,size);
-       }catch(const QString& str){
+      throw str;
+    }
 
-        throw str;
-       }
+    packet.setTypePacket(static_cast<TypePacket>(type));
+    if(static_cast<TypePacket>(type) != TypePacket::INFO_CLIENT){
+      packet.setSize(sizePacket,true);
+    }else{
+      packet.setSize(sizePacket);
+    }
 
-         packet.setTypePacket(static_cast<TypePacket>(type));
-       if(static_cast<TypePacket>(type) != TypePacket::INFO_CLIENT){
-         packet.setSize(sizePacket,true);
-       }else{
-         packet.setSize(sizePacket);
-       }
+    packet.setDataWithHeader(data);
+    packetHandler(socket,packet);
+  }else{
 
-        packet.setDataWithHeader(data);
-        packetHandler(socket,packet);
-      }
+    throw "SOCKER_ERROR";
+  }
+
+
+
 }
 
 

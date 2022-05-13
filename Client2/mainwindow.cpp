@@ -1,6 +1,7 @@
 #include "mainwindow.h"
 #include "ui_mainwindow.h"
 #include <QDebug>
+#include <QDateTime>
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
@@ -16,7 +17,12 @@ MainWindow::MainWindow(QWidget *parent)
   setEnableButtons(false);
 
   connect(&m_client,&Client::packageReceived,this,&MainWindow::fillForm,Qt::BlockingQueuedConnection);
+  connect(&m_client,&Client::disconnected,this,[&](){ setEnableButtons(false);
+                                                     ui->textEdit->append("Disconnected!");
+                                                     ui->textEdit->append("--------------------------"); });
+
 }
+
 
 MainWindow::~MainWindow()
 {
@@ -27,7 +33,6 @@ void MainWindow::setEnableButtons(bool isEnable)
 {
   ui->pushButtonRefresh->setEnabled(isEnable);
   ui->pushButtonDisconnect->setEnabled(isEnable);
-
 
   ui->lineEditIP->setEnabled(!isEnable);
   ui->lineEditPort->setEnabled(!isEnable);
@@ -60,7 +65,11 @@ void MainWindow::on_pushButtonConnect_clicked()
 
 void MainWindow::on_pushButtonRefresh_clicked()
 {
+  Packet packet;
+  packet.setTypePacket(TypePacket::COMMAND);
+  packet.appendMetaData(static_cast<char>(Command::SEND_AGAIN_XML_DATA));
 
+  m_client.sendToServer(packet);
 }
 
 void MainWindow::fillForm(const Packet &packet)
@@ -68,9 +77,17 @@ void MainWindow::fillForm(const Packet &packet)
   switch (packet.type()) {
 
   case TypePacket::MESSAGE:{
-    std::string str ( packet.getData().begin(),packet.getData().end() );
-    str += '\0';
-    ui->textEdit->setText(QString::fromLocal8Bit( str.c_str()));
+
+    ui->textEdit->append( QDateTime::currentDateTime().toString("HH:mm:ss") + ":");
+    std::string str = "\0";
+    str.insert(str.begin(),packet.getData().begin(),packet.getData().end());
+
+    QStringList list = QString::fromUtf8(str.c_str()).split('\n'); // без этого не красит text в textEdit
+    for(const QString& strLine : list){
+       ui->textEdit->append(strLine);
+    }
+
+    ui->textEdit->append("--------------------------");
     break;
   }
 
@@ -82,25 +99,16 @@ void MainWindow::fillForm(const Packet &packet)
     ui->imageView->setPixmap(pix);
   }
 
-
   default:
 
     break;
-
   }
 }
 
 
-
-
-
-
-
-
-
-
-
-
-
-
+void MainWindow::on_pushButtonDisconnect_clicked()
+{
+  m_client.disconnect();
+  setEnableButtons(false);
+}
 

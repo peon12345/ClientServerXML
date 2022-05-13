@@ -11,7 +11,7 @@
 class Client : public QObject , public DataHandler
 {
   Q_OBJECT
-public:
+  public:
   Client() = default;
   virtual ~Client();
 
@@ -28,16 +28,17 @@ private:
   }
   m_status;
 
-  SOCKET m_connection;
+  SOCKET m_connection = INVALID_SOCKET;
 private:
   ClientInfo m_clientInfo;
   void packetHandler(SOCKET socket,const Packet& packet) override;
 private:
   void sendClientInfo();
-  void emitPackageReceived(const Packet& packet);
+  // void emitPackageReceived(const Packet& packet);
 signals:
 
-void packageReceived(const Packet& packet);
+  void packageReceived(const Packet& packet);
+  void disconnected();
 };
 
 #endif // CLIENT_H

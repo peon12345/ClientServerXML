@@ -24,6 +24,8 @@ private slots:
 
   void on_pushButtonRefresh_clicked();
   void fillForm(const Packet& packet);
+  void on_pushButtonDisconnect_clicked();
+
 private:
   Client m_client;
   void setEnableButtons(bool isEnable);

@@ -15,7 +15,7 @@
 
 class Server : public QObject , public DataHandler{
   Q_OBJECT
-public:
+      public:
   Server() = default;
   virtual ~Server();
 
@@ -40,7 +40,7 @@ protected:
   void disconnectClientSocket(SOCKET socket);
 private:
   static constexpr int DEFAULT_MAX_CONNECT = 100;
-   size_t m_maxConnection;
+  size_t m_maxConnection;
 
   std::atomic<bool> m_flagListenConnects = false;
   std::atomic<bool> m_flagListenClientData = false;
@@ -53,19 +53,23 @@ private:
   int m_counterUnknownClients = 0;
   SOCKET m_listenSocket;
 
-  std::unordered_map<SOCKET,std::queue<Packet>> m_queueSendData;
+  std::unordered_map<SOCKET,std::list<Packet>> m_sendData;
+
   std::vector<std::pair<SOCKET,ClientInfo*>> m_connectedClients;
-  std::vector<SOCKET> waitingDisconnectSocket;
+  std::vector<SOCKET> m_waitingDisconnectSocket;
 
 private:
   void packetHandler(SOCKET socket,const Packet& packet) override;
   void addClientInfo(SOCKET socket,const Packet& packet);
   void newClientConnectHandler(SOCKET newConnection);
   void disconnectAll();
+  void scheduleShutdownSocket(SOCKET socket);
 signals:
   void clientConnected(const QString& name);
   void packageReceived(const Packet& packet);
   void clientChangedName(const QString& oldname, const QString& newName);
+  void clientDisconnected(const QString& name);
+  void requestXmlData();
 };
 
 #endif // SERVER_H
